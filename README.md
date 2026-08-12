@@ -45,8 +45,15 @@ target AWS account.
   installed — see [Collector tools](#collector-tools) below.
 - **Frontend**: a React + TypeScript SPA (Vite, shadcn/ui, Tailwind,
   TanStack Query). It is **not** a separate running service — it's built
-  once (`npm run build`) into static files that the FastAPI backend serves
-  directly at `/app`. There is no separate frontend port.
+  once (`npm run build`, or automatically inside the `web` Docker image)
+  into static files that the FastAPI backend serves directly at `/app`.
+  There is no separate frontend port.
+- **`web`**: an optional Docker service running the exact same FastAPI app
+  as native `workbench.serve`, with the frontend pre-built into the image
+  — see [Getting started](#getting-started). Native `workbench.serve` and
+  the `web` container are two ways to run the same code, not two
+  different things; use whichever fits (native for fast edit-and-reload
+  iteration, `web` for a from-scratch clone with nothing installed).
 - **Graph store**: Neo4j, used by Cartography to store AWS resource
   relationships (who-can-reach-what style analysis).
 
@@ -60,7 +67,7 @@ target AWS account.
 | PostgreSQL | `localhost:5432` |
 | Redis | `localhost:6379` |
 | Neo4j browser | `http://localhost:7474`, Bolt on `7687` |
-| Adminer (DB browser) | `http://localhost:8080` |
+| Adminer (DB browser) | `http://localhost:8081` |
 
 The web app (`workbench.serve`) picks a working port automatically if
 `2909` is taken and prints which port it actually bound to — it will not
@@ -68,23 +75,32 @@ kill or fight anything already listening.
 
 ## Getting started
 
-### 1. Start infrastructure + the worker (Docker)
+### Option A: one command (recommended for a fresh clone)
+
+Requires only Docker + Docker Compose installed — nothing else. Builds and
+starts everything: Postgres, Redis, Neo4j, the worker (with every
+collector tool baked in), and the web app itself (with the React SPA
+pre-built into the image).
+
+```bash
+./install.sh
+```
+
+Open **http://localhost:2909/app** — the first visit walks you through
+creating the admin account. No native Python/Node setup, no manual tool
+installation, no separate build step.
+
+### Option B: native web app + Docker infra (for active development)
+
+Faster iteration on backend/frontend code (edit and refresh, no image
+rebuild), at the cost of needing Python/Node installed on the host.
 
 ```bash
 docker compose up -d postgres redis neo4j worker
-```
 
-This builds the `worker` image on first run (installs Prowler, Steampipe,
-Cloudsplaining, Cartography, and the AWS CLI inside the image — see
-below) and starts Postgres, Redis, and Neo4j.
-
-### 2. Run the backend + frontend natively
-
-The web app itself runs outside Docker, against the same Postgres/Redis:
-
-```bash
 python3 -m venv venv
 venv/bin/python -m pip install -r requirements-dev.txt
+venv/bin/python -m alembic upgrade head
 
 cd frontend && npm install && npm run build && cd ..
 
@@ -93,7 +109,7 @@ venv/bin/python -m workbench.serve
 
 Open **http://localhost:2909/app**.
 
-### 3. CLI path (no browser needed)
+### CLI path (no browser needed, either option)
 
 ```bash
 venv/bin/python main.py

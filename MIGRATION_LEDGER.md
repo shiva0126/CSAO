@@ -10,6 +10,104 @@ Reference docs: `~/Desktop/CSAO_Architecture.md` (as-found architecture),
 
 ---
 
+## 2026-08-12 — Full containerized deploy (`./install.sh`), plus two real bugs found while validating it
+
+User asked for a genuinely turnkey deploy: clone the repo on another
+machine, run one command, get a fully working instance with every
+collector tool installed -- not the current state, where the web app
+still required a native Python venv + `npm run build` on the host even
+though `worker` was already fully containerized.
+
+**Change:** added a `web` service to `docker-compose.yml` running the
+same FastAPI app as native `workbench.serve`, from a new multi-stage
+`Dockerfile` stage (`frontend-builder`, Node 22) that builds the React
+SPA at image-build time -- no host Node/npm needed. `web` runs
+`alembic upgrade head` on every start (idempotent, so safe) before
+starting uvicorn. Rewrote `install.sh` (previously an apt-get/Ubuntu-only
+script installing tools onto the host, stale since the Docker migration)
+into a real one-command bootstrap: generates `.env` with a fresh
+password if missing, then `docker compose up -d --build`, then polls
+`/health` until ready. Fixed `.env.example`: it documented an async
+`DATABASE_URL` variable that nothing in the codebase actually reads (the
+app is 100% synchronous SQLAlchemy) -- traced this while investigating
+*why* the native app worked without ever explicitly exporting `.env`
+into its process environment; turns out `workbench/db/base.py` already
+calls `load_dotenv()` itself, so this was always working correctly and
+the async variable was simply dead/fictional documentation from earlier
+in this project.
+
+**Two real bugs found and fixed while actually testing this, not just
+writing it:**
+
+1. **The Tools-page terminal (`workbench/api/terminal.py`) would have
+   been completely broken under this new deployment shape.** It works by
+   running `docker exec` into the `worker` container -- fine when
+   `workbench.serve` runs natively on the Docker host, which has
+   `docker` and the daemon socket for free. Once the web app itself runs
+   *inside* a container, neither exists there by default. Confirmed the
+   gap directly (`docker exec csao_web which docker` → not found, no
+   `/var/run/docker.sock`) before touching anything. Fixed by installing
+   the Docker CLI (client binary only, from Docker's official static
+   release, not the full `docker-ce`/daemon) in the Dockerfile, and
+   mounting the host's `/var/run/docker.sock` into `web` in
+   docker-compose.yml -- the standard "Docker-outside-of-Docker" pattern.
+   Re-verified live afterward: `docker` resolves, `docker ps` from
+   inside `web` lists every sibling container, and a real terminal
+   session against Prowler through the fully-containerized stack
+   returned real output.
+
+2. **Running the pytest suite earlier this session corrupted the real,
+   shared Postgres `workbench_state`.** `tests/test_workbench_control_plane.py`'s
+   account-vault tests construct `WorkbenchState(tmp_path / "state.json")`,
+   which *looks* isolated per test run -- but `WorkbenchState` was
+   rewritten during the Postgres migration to always persist to the
+   shared database regardless of the `path` argument (kept only for
+   compatibility/logging). Every test run that got as far as
+   `vault.save_account(...)` before failing on a since-stale JSON-file
+   assertion left real, permanently-undecryptable fake accounts ("Prod
+   AWS" x4, "Audit" x1) sitting in the actual `cloud_accounts` array,
+   encrypted with a per-test-run key that gets deleted the moment
+   pytest's `tmp_path` fixture cleans up. This surfaced as real 500s
+   (`ValueError: Stored account credentials could not be decrypted with
+   any trusted key`) on `/dashboard`, `/accounts`, and
+   `/assessments/wizard-defaults` the moment those endpoints tried to
+   enumerate accounts -- not a deployment-specific bug, but it was this
+   validation pass that exposed it, so documenting it here. Fixed by
+   deleting the 5 corrupted entries directly. **Not yet fixed at the
+   root cause**: these account-vault tests still aren't actually
+   isolated and will corrupt shared state again if run against a
+   database anyone cares about. They need either a per-test Postgres
+   schema/database or a way to inject an isolated state backend --
+   flagging this clearly rather than re-running that test file again
+   without one.
+
+**Verified, end to end, not just written:** built the new `web` image
+for real (multi-stage build completed, Docker CLI step confirmed via
+`command -v docker` inside the build), stopped the native
+`workbench.serve` process, brought up the containerized `web` in its
+place, confirmed migrations ran automatically against the real database
+(`alembic.runtime.migration` log lines, `\dt` shows all 5 tables), then
+ran a full API sweep (dashboard, coverage, trust-center, findings,
+checklist, threats, attack-paths, risk, evidence, wizard-defaults,
+history, reports, accounts, settings, users, docs, access-requirements)
+-- every endpoint 200 after the two fixes above. Confirmed the terminal
+websocket works through the fully-containerized path specifically (not
+just the native one already verified earlier), by opening a real
+Prowler terminal session over `ws://` and reading back its actual
+`--help` output.
+
+**Known limitation, stated plainly:** this was validated by rebuilding
+and recreating the `web` container against this machine's existing
+Postgres/Redis/Neo4j *volumes*, not a literal from-empty-volumes fresh
+clone (avoided wiping this session's live data unnecessarily). Every
+individual piece a fresh clone depends on -- the image build, the
+migration-on-startup, the full endpoint sweep, the terminal-via-socket
+fix -- was verified directly; the one thing not literally re-proven is
+an empty Postgres volume's very first `alembic upgrade head` run, though
+that's the same idempotent command already confirmed working here.
+
+---
+
 ## 2026-08-12 — Launch-tab IAM policy JSON, scoped to selected collectors and verified read-only
 
 User asked for a section in the Assessments Launch tab that generates a

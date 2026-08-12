@@ -77,6 +77,46 @@ services:
       neo4j:
         condition: service_started
 
+  web:
+    build: .
+    container_name: csao_web
+    restart: unless-stopped
+    # Migrations are idempotent (alembic upgrade head no-ops once current),
+    # so running them on every start is simplest -- no separate init step
+    # or container needed.
+    command: sh -c "alembic upgrade head && uvicorn workbench.app:app --host 0.0.0.0 --port 2909"
+    working_dir: /app
+    volumes:
+      - .:/app
+      # `worker` writes assessment output/reports/logs here too -- web needs
+      # the same view of the repo, not an isolated one, to serve them back.
+      # The one exception is frontend/dist: it's a build artifact baked into
+      # the image at build time (see Dockerfile's frontend-builder stage),
+      # and a fresh clone won't have it on the host at all. An anonymous
+      # volume mounted at this exact subpath preserves the image's baked-in
+      # content instead of letting the bind mount above shadow it with
+      # whatever (if anything) exists on the host.
+      - /app/frontend/dist
+      # Gives the Tools-page terminal (workbench/api/terminal.py) the
+      # ability to `docker exec` into the `worker` container from inside
+      # this one -- the classic "docker-outside-of-docker" pattern. This
+      # grants whatever can reach this socket the same access as anyone
+      # running `docker` on the host, scoped only by what the app code
+      # itself restricts (Analyst/Administrator role, fixed set of tool
+      # containers -- see terminal.py).
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "2909:2909"
+    environment:
+      DATABASE_URL_SYNC: postgresql+psycopg://csao:${CSAO_DB_PASSWORD}@postgres:5432/csao
+      REDIS_URL: redis://redis:6379/0
+      CSAO_HOST: 0.0.0.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
 volumes:
   csao_pgdata:
   csao_redisdata:

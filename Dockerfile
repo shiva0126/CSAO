@@ -1,3 +1,15 @@
+# Builds the React SPA once, at image-build time, so a fresh clone needs
+# nothing but Docker installed -- no host-level Node/npm. Used by the `web`
+# service (docker-compose.yml), which runs from this baked-in copy rather
+# than bind-mounting source like `worker` does, since bind-mounting `.`
+# over this image would shadow the very dist/ directory this stage builds.
+FROM node:22-slim AS frontend-builder
+WORKDIR /app/frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
 FROM python:3.12-slim
 
 # WeasyPrint (PDF report generation) needs these at runtime, not just
@@ -56,6 +68,30 @@ RUN set -eux; \
     /tmp/aws/install; \
     rm -rf /tmp/awscliv2.zip /tmp/aws
 
+# Docker CLI (client binary only, no dockerd) -- needed because the `web`
+# service's Tools-page terminal feature (workbench/api/terminal.py) execs
+# into the `worker` container via `docker exec`. That only works if this
+# image both has the `docker` binary on PATH AND is given the host's Docker
+# socket at runtime (see docker-compose.yml's `web` service volumes) --
+# without the socket mount this binary alone does nothing.
+RUN set -eux; \
+    case "${TARGETARCH:-$(dpkg --print-architecture)}" in \
+        amd64) DOCKER_ARCH=x86_64 ;; \
+        arm64) DOCKER_ARCH=aarch64 ;; \
+        *) DOCKER_ARCH=x86_64 ;; \
+    esac; \
+    for i in 1 2 3 4 5; do \
+        curl --connect-timeout 10 --max-time 60 -fsSL \
+            "https://download.docker.com/linux/static/stable/${DOCKER_ARCH}/docker-27.3.1.tgz" -o /tmp/docker.tgz && \
+        [ -s /tmp/docker.tgz ] && break || \
+        { echo "docker cli download attempt $i failed, retrying..."; rm -f /tmp/docker.tgz; sleep 5; }; \
+    done; \
+    [ -s /tmp/docker.tgz ]; \
+    tar -xzf /tmp/docker.tgz -C /tmp; \
+    mv /tmp/docker/docker /usr/local/bin/docker; \
+    rm -rf /tmp/docker.tgz /tmp/docker; \
+    command -v docker
+
 # Steampipe -- not pip-installable. The `aws` plugin is required for
 # queries/aws/*.sql (see modules/steampipe_runner.py -- nothing else
 # installs this plugin).
@@ -106,5 +142,9 @@ RUN set -eux; \
     command -v steampipe; \
     timeout 180 steampipe plugin install aws
 
-# App code is bind-mounted by docker-compose.yml at runtime, not baked into
-# the image -- this keeps local iteration fast (no rebuild on every edit).
+# App code is bind-mounted by `worker` in docker-compose.yml at runtime,
+# not baked into the image -- keeps local iteration fast (no rebuild on
+# every edit). `web` does NOT bind-mount (see docker-compose.yml), so it
+# runs from this baked-in copy -- including the built frontend above.
+COPY . .
+COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
