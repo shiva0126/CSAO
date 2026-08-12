@@ -53,6 +53,17 @@ export interface DashboardData {
     issues: string[]
   }
   quick_actions: { label: string; href: string }[]
+  assessment_health_score: AssessmentHealthScore
+}
+
+export interface AssessmentHealthScore {
+  configuration: number
+  permissions: number
+  evidence_coverage: number
+  collector_success: number
+  cloud_coverage: number
+  assessment_confidence: number
+  deductions: string[]
 }
 
 export interface TimelineEntry {
@@ -284,12 +295,14 @@ export interface WizardDefaults {
 }
 
 export interface ToolValidationRow {
+  key: string
   name: string
   installed: boolean
   compatible: boolean
   version: string
   read_only_mode: string
   required: boolean
+  purpose?: string
 }
 
 export interface PermissionMatrixRow {
@@ -311,4 +324,58 @@ export interface TrustCenterData {
   tool_validation: ToolValidationRow[]
   tool_status_checked_at: string
   safety_validation: { status: string; violations?: { collector: string; reason: string }[] }
+}
+
+export interface DocSummary {
+  id: string
+  title: string
+  category: string
+  description: string
+  exists: boolean
+}
+
+export interface DocContent {
+  id: string
+  title: string
+  category: string
+  content: string
+}
+
+export interface MitreMappingRow {
+  tool: string
+  check_id: string
+  tactic: string
+  technique_id: string
+  technique: string
+}
+
+export interface AttackPathCatalogRow {
+  ap_code: string
+  name: string
+  kill_chain_summary: string
+  domains_spanned: string
+  stride_categories: string
+  severity: string
+  entry_check_ids: string[]
+  escalation_check_ids: string[]
+  detection_check_ids: string[]
+}
+
+export interface CoverageDomainRow {
+  domain: string
+  implemented_controls: number
+  automatically_validated: number
+  manual_validation_required: number
+  not_covered: number
+  coverage_percentage: number
+}
+
+export interface CoverageSummary {
+  rows: CoverageDomainRow[]
+  domains: number
+  implemented_controls: number
+  automatically_validated: number
+  manual_validation_required: number
+  not_covered: number
+  average_coverage: number
 }

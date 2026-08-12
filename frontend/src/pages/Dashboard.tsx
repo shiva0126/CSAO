@@ -1,4 +1,5 @@
-import { useDashboard } from '@/lib/queries'
+import { useMemo, type ReactNode } from 'react'
+import { useChecklist, useCoverage, useDashboard, useRisk } from '@/lib/queries'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -6,6 +7,14 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Legend,
+  Pie,
+  PieChart,
+  PolarAngleAxis,
+  PolarGrid,
+  PolarRadiusAxis,
+  Radar,
+  RadarChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -32,16 +41,71 @@ function KpiCard({ label, value, sub }: { label: string; value: string | number;
   )
 }
 
+function ChartCard({ title, children, height = 260 }: { title: string; children: ReactNode; height?: number }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{title}</CardTitle>
+      </CardHeader>
+      <CardContent style={{ height }}>{children}</CardContent>
+    </Card>
+  )
+}
+
+function EmptyState({ label }: { label: string }) {
+  return <p className="text-sm text-muted-foreground h-full flex items-center justify-center">{label}</p>
+}
+
 export function DashboardPage() {
   const { data, isLoading, error } = useDashboard()
+  const coverage = useCoverage()
+  const risk = useRisk()
+  const checklist = useChecklist()
+
+  const severityData = useMemo(
+    () => Object.entries(data?.findings_by_severity ?? {}).map(([severity, count]) => ({ severity, count })),
+    [data],
+  )
+
+  const coverageData = coverage.data?.rows ?? []
+
+  const evidenceCoverageData = (data?.evidence_coverage ?? []).map((e) => ({
+    service: e.service,
+    coveragePct: e.coverage === '100%' ? 100 : e.coverage === 'Limited' ? 50 : 0,
+  }))
+
+  const topRisk = (risk.data?.rows ?? []).slice(0, 10).map((r) => ({
+    name: (r.title || r.finding_id || '').slice(0, 28),
+    risk_score: r.risk_score,
+    severity: r.severity,
+  }))
+
+  const health = data?.assessment_health_score
+  const healthRadar = health
+    ? [
+        { metric: 'Configuration', value: health.configuration },
+        { metric: 'Permissions', value: health.permissions },
+        { metric: 'Evidence Coverage', value: health.evidence_coverage },
+        { metric: 'Collector Success', value: health.collector_success },
+        { metric: 'Cloud Coverage', value: health.cloud_coverage },
+      ]
+    : []
+
+  const tacticFrequency = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const row of checklist.data?.rows ?? []) {
+      for (const tactic of row.mitre_mapping?.tactics ?? []) {
+        counts[tactic] = (counts[tactic] ?? 0) + 1
+      }
+    }
+    return Object.entries(counts)
+      .map(([tactic, count]) => ({ tactic, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10)
+  }, [checklist.data])
 
   if (isLoading) return <p className="text-muted-foreground">Loading dashboard…</p>
   if (error || !data) return <p className="text-destructive">Failed to load dashboard.</p>
-
-  const severityData = Object.entries(data.findings_by_severity || {}).map(([severity, count]) => ({
-    severity,
-    count,
-  }))
 
   return (
     <div className="space-y-6">
@@ -72,13 +136,10 @@ export function DashboardPage() {
         <KpiCard label="Manual Reviews Remaining" value={data.manual_reviews_remaining} />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Findings by Severity</CardTitle>
-        </CardHeader>
-        <CardContent className="h-64">
+      <div className="grid md:grid-cols-2 gap-4">
+        <ChartCard title="Findings by Severity">
           {severityData.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No findings yet — run an assessment to populate this.</p>
+            <EmptyState label="No findings yet — run an assessment to populate this." />
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={severityData}>
@@ -94,10 +155,117 @@ export function DashboardPage() {
               </BarChart>
             </ResponsiveContainer>
           )}
-        </CardContent>
-      </Card>
+        </ChartCard>
 
-      <div className="grid md:grid-cols-2 gap-4">
+        <ChartCard title="Findings by Severity (share)">
+          {severityData.length === 0 ? (
+            <EmptyState label="No findings yet." />
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={severityData}
+                  dataKey="count"
+                  nameKey="severity"
+                  innerRadius={50}
+                  outerRadius={85}
+                  paddingAngle={2}
+                >
+                  {severityData.map((entry) => (
+                    <Cell key={entry.severity} fill={SEVERITY_COLOR[entry.severity] ?? '#64748b'} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
+        <ChartCard title="Assessment Health Score">
+          {healthRadar.length === 0 ? (
+            <EmptyState label="No health data yet." />
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <RadarChart data={healthRadar}>
+                <PolarGrid />
+                <PolarAngleAxis dataKey="metric" fontSize={11} />
+                <PolarRadiusAxis domain={[0, 100]} fontSize={10} />
+                <Radar dataKey="value" stroke="#2563eb" fill="#2563eb" fillOpacity={0.35} />
+                <Tooltip />
+              </RadarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
+        <ChartCard title="Checklist Coverage by Domain">
+          {coverageData.length === 0 ? (
+            <EmptyState label="No coverage data yet." />
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={coverageData} layout="vertical" margin={{ left: 24 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                <XAxis type="number" domain={[0, 100]} fontSize={11} unit="%" />
+                <YAxis type="category" dataKey="domain" width={160} fontSize={11} />
+                <Tooltip />
+                <Bar dataKey="coverage_percentage" radius={[0, 4, 4, 0]} fill="#0ea5e9" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
+        <ChartCard title="Evidence Coverage by Service">
+          {evidenceCoverageData.length === 0 ? (
+            <EmptyState label="No evidence coverage data yet." />
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={evidenceCoverageData} layout="vertical" margin={{ left: 24 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                <XAxis type="number" domain={[0, 100]} fontSize={11} unit="%" />
+                <YAxis type="category" dataKey="service" width={120} fontSize={11} />
+                <Tooltip />
+                <Bar dataKey="coveragePct" radius={[0, 4, 4, 0]} fill="#16a34a" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
+        <ChartCard title="Top 10 Highest-Risk Findings">
+          {topRisk.length === 0 ? (
+            <EmptyState label="No findings yet." />
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={topRisk} layout="vertical" margin={{ left: 24 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                <XAxis type="number" fontSize={11} />
+                <YAxis type="category" dataKey="name" width={180} fontSize={10} />
+                <Tooltip />
+                <Bar dataKey="risk_score" radius={[0, 4, 4, 0]}>
+                  {topRisk.map((d, i) => (
+                    <Cell key={i} fill={SEVERITY_COLOR[d.severity] ?? '#64748b'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
+        <ChartCard title="Top MITRE ATT&CK Tactics">
+          {tacticFrequency.length === 0 ? (
+            <EmptyState label="No MITRE mapping data yet." />
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={tacticFrequency} layout="vertical" margin={{ left: 24 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                <XAxis type="number" allowDecimals={false} fontSize={11} />
+                <YAxis type="category" dataKey="tactic" width={160} fontSize={11} />
+                <Tooltip />
+                <Bar dataKey="count" radius={[0, 4, 4, 0]} fill="#9333ea" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
         <Card>
           <CardHeader>
             <CardTitle>Recent Assessments</CardTitle>

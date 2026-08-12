@@ -16,6 +16,7 @@ export default defineConfig(({ command }) => ({
       '/api': {
         target: 'http://127.0.0.1:2909',
         changeOrigin: false,
+        ws: true,
       },
     },
   },

@@ -2,13 +2,18 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
 import type {
   AccountRecord,
+  AttackPathCatalogRow,
   AttackPathGraph,
   ChecklistRow,
   CorrelatedThreatRow,
+  CoverageSummary,
   DashboardData,
+  DocContent,
+  DocSummary,
   EvidenceSource,
   FindingRow,
   MeResponse,
+  MitreMappingRow,
   MonitorState,
   RecommendationRow,
   ReportRow,
@@ -202,4 +207,34 @@ export function useUsers() {
 
 export function useTrustCenter() {
   return useQuery({ queryKey: ['trust-center'], queryFn: () => api.get<TrustCenterData>('/trust-center') })
+}
+
+export function useCoverage() {
+  return useQuery({ queryKey: ['coverage'], queryFn: () => api.get<CoverageSummary>('/coverage') })
+}
+
+export function useDocsList() {
+  return useQuery({ queryKey: ['docs'], queryFn: () => api.get<{ rows: DocSummary[] }>('/docs') })
+}
+
+export function useDoc(id: string | null) {
+  return useQuery({
+    queryKey: ['docs', id],
+    queryFn: () => api.get<DocContent>(`/docs/${id}`),
+    enabled: !!id,
+  })
+}
+
+export function useMitreReference() {
+  return useQuery({
+    queryKey: ['docs-reference-mitre'],
+    queryFn: () => api.get<{ rows: MitreMappingRow[] }>('/docs/reference/mitre'),
+  })
+}
+
+export function useAttackPathCatalog() {
+  return useQuery({
+    queryKey: ['docs-reference-attack-paths'],
+    queryFn: () => api.get<{ rows: AttackPathCatalogRow[] }>('/docs/reference/attack-paths'),
+  })
 }

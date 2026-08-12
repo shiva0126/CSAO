@@ -10,6 +10,164 @@ Reference docs: `~/Desktop/CSAO_Architecture.md` (as-found architecture),
 
 ---
 
+## 2026-08-12 — Pre-push functional review
+
+Before pushing the Docs/Tools/Dashboard work, did a full pass: hit every
+API endpoint with a live session (all 24 return correct status codes,
+including a 404 for an unknown doc id), inspected the actual data shapes
+feeding the new Dashboard charts (confirms the empty-state paths are
+correct pre-assessment: `findings_by_severity` and `/risk` are empty with
+no assessment run yet, `/coverage` and the checklist's MITRE tactics are
+real static reference data so those two charts render immediately), and
+grepped for dead references to everything deleted this session
+(`Dataviz`, `CopyButton`, the old `manual_command`/`common_commands`
+fields) -- none found.
+
+Found and fixed three real bugs in `workbench/api/terminal.py`, all in
+the newest and most security-sensitive code path (see findings reported
+via code review): the websocket never closed when the underlying
+`docker exec` process died, leaving a hung session with no visible error;
+`subprocess.Popen(preexec_fn=os.setsid)` is documented by Python itself as
+unsafe inside a multi-threaded process (swapped for `start_new_session=True`,
+the safe native equivalent); and the auth-failure/unknown-tool close codes
+were sent before `accept()`, so they never reached the client as real
+close codes -- both showed identically as a bare HTTP 403 with no reason
+given. Fixed by accepting first and writing an explanatory message before
+closing. Re-verified live after the fixes: happy path (Prowler and
+Steampipe help text + a real command round-trip), unauthenticated
+rejection, and unknown-tool rejection all now behave correctly with
+visible reasons.
+
+---
+
+## 2026-08-12 — Revision: dataviz merged into Dashboard, Tools gets a real terminal
+
+Immediate follow-up correction to the entry directly below, per user
+feedback that two specific choices weren't what they meant:
+
+1. **Dataviz merged into Dashboard, `/dataviz` removed.** The standalone
+   page was one extra click away from the one place people actually look
+   first. All six charts (severity donut, health radar, coverage by
+   domain, evidence coverage by service, top-10 risk findings, top MITRE
+   tactics) now live directly on `/dashboard` alongside the existing KPI
+   cards and severity bar chart. `pages/Dataviz.tsx` deleted; nav item and
+   route removed.
+
+2. **Tools page: replaced the copy-paste command panel with an actual
+   in-browser terminal.** The user clarified "open the CLI" meant a real
+   terminal that opens when you click a tool -- not commands to copy into
+   your own terminal, and specifically not `docker exec` syntax shown to
+   the analyst at all. This is a genuine reversal of the earlier
+   AskUserQuestion answer (copy-paste panel), which turned out not to
+   match what "the CLI opens" meant in practice.
+   - `workbench/api/terminal.py` (new): a `WebSocket` route,
+     `/api/v1/tools/{tool_key}/terminal`, restricted to `ANALYST`/
+     `ADMINISTRATOR` roles (checked from the session cookie manually,
+     since this is a raw execution surface -- more sensitive than any
+     other endpoint in the app, so `READ_ONLY` is deliberately excluded).
+     Allocates a PTY via `pty.openpty()` + `subprocess.Popen` (not
+     `pty.fork()` -- forking the whole running asyncio/uvicorn process
+     from inside itself is a known footgun; spawning a child via Popen
+     with the pty's slave fd as its stdio is the safe version of the same
+     pattern) running `docker exec -it csao_worker sh -c '<tool> --help;
+     ...; exec sh'`. Bridges the PTY's master fd to the websocket in both
+     directions via `asyncio`'s `add_reader`; a small JSON control channel
+     over text frames handles terminal resize (`TIOCSWINSZ` on the master
+     fd, which the pty/tty layer turns into `SIGWINCH` for the shell
+     automatically).
+   - `core/tool_check.py`: reworked `TOOL_MANUAL_USAGE` (command strings
+     meant for copy-paste, now unwanted) into `TOOL_USAGE` (`purpose` +
+     `help_command`, e.g. `"prowler --help"`) and added a stable `key`
+     per tool (`aws`, `prowler`, `steampipe`, `cloudsplaining`,
+     `cartography`, `access-analyzer`) used both in the API response and
+     as the WebSocket path segment.
+   - `pages/Tools.tsx`: cards now show purpose/status/version and a single
+     "Open terminal" button -- no visible commands of any kind.
+   - `components/ToolTerminal.tsx` (new): `@xterm/xterm` +
+     `@xterm/addon-fit` in a Dialog. Sends keystrokes as binary frames
+     (`TextEncoder`-encoded), resize as JSON text frames, matching the
+     backend's framing convention; disposes the terminal and closes the
+     socket on dialog close.
+   - `frontend/vite.config.ts`: added `ws: true` to the `/api` proxy so
+     the websocket also works through Vite's dev server, not just the
+     production build (same-origin, no proxy needed there).
+   - Deleted `components/CopyButton.tsx` -- no longer used anywhere.
+
+Verified live: connected to `/tools/prowler/terminal` over a websocket
+with a valid session cookie -- received Prowler's real `--help` output
+first, then a typed `echo` command executed inside the worker container
+and returned real output, confirming the PTY bridge works both
+directions. `npm run build` clean after the rewrite.
+
+Deployment note carried into this: the terminal execs into the `worker`
+container by container name, so it only works when `workbench.serve`
+runs on the same host as `docker compose` -- true for this setup, not
+guaranteed in general (documented as a code comment in `terminal.py`).
+
+---
+
+## 2026-08-12 — Docs, Tools, and Dataviz pages
+
+User feedback: the existing markdown docs (theory/methodology/permission
+matrices) and MITRE/attack-path reference data lived only as files in the
+repo, invisible from the app; there was no place to see which collector
+tools were installed with a quick way to run them manually; and only one
+chart existed anywhere in the SPA (the severity bar chart on Dashboard).
+Asked for a Docs sidebar, a Tools sidebar, and a `/dataviz` page.
+
+Before building the manual-tool-run feature, asked the user how "open the
+CLI" should actually work, given the security tradeoff for a tool whose
+whole premise is read-only safety. Chose: a copy-paste command panel
+(exact `docker exec` commands with a copy button) over a guided run form
+or a full interactive web terminal — zero new execution surface, nothing
+runs from the browser.
+
+**Backend:**
+- `core/tool_check.py`: added `TOOL_MANUAL_USAGE`, a purpose + example
+  `docker exec` command + a couple of common commands per tool, merged
+  into each `tool_validation` row the worker already reports at startup —
+  no new endpoint needed, `GET /trust-center` now just carries more per
+  tool.
+- `workbench/api/docs.py` (new): `GET /docs` (allow-listed list of every
+  markdown doc, grouped by category), `GET /docs/{id}` (raw content, id
+  is looked up against the allow-list server-side, not a filesystem path,
+  so there's no traversal surface), `GET /docs/reference/mitre` (parses
+  `data/mitre_mappings.yaml` into flat rows), `GET /docs/reference/attack-paths`
+  (parses `data/attack_path_catalog.yaml`). Registered in `workbench/api/__init__.py`.
+- No new endpoint for Dataviz — `/coverage` already existed server-side
+  with no frontend consumer; everything else reuses `/dashboard`,
+  `/risk`, `/checklist` (MITRE tactic frequency is aggregated client-side
+  from `checklist_rows()`'s existing `mitre_mapping` field).
+
+**Frontend:**
+- Added `react-markdown` + `remark-gfm` (only new frontend dependency;
+  nothing else existed for rendering markdown).
+- `pages/Docs.tsx`: category sidebar (Guides / Security & Permissions /
+  Audit Reports / Engineering Log, from `DOC_LIBRARY`) + a Reference/Theory
+  section rendering the MITRE mapping table and the 15-entry attack path
+  catalog as actual tables instead of dumping the YAML.
+- `pages/Tools.tsx`: one card per collector tool — install status, version,
+  purpose, and the manual-run command(s) with a copy button. Reuses
+  `useTrustCenter()`, no new query hook needed for the core data.
+- `pages/Dataviz.tsx`: severity donut, assessment health radar (5-axis,
+  from the previously-buried `assessment_health_score`), checklist
+  coverage by domain, evidence coverage by service, top-10 highest-risk
+  findings, and top MITRE tactics by frequency — six charts, all built on
+  data that already existed server-side.
+- `components/CopyButton.tsx` (new, shared by Tools page).
+- Nav (`Layout.tsx`) and routes (`App.tsx`): added Dataviz, Docs, Tools
+  between Assessments/Reports and Admin.
+
+Verified: `npm run build` (tsc + vite) clean, all three new API routes
+return real data end to end (`/docs` lists 22 docs, `/docs/reference/mitre`
+returns 72 rows, `/docs/reference/attack-paths` returns 15), and `/trust-center`
+carries the new `manual_command`/`common_commands` fields after restarting
+the worker (its bind-mounted code picked up the `tool_check.py` change
+immediately — no image rebuild needed). All three new SPA routes
+(`/app/docs`, `/app/tools`, `/app/dataviz`) serve 200.
+
+---
+
 ## 2026-08-12 — Collector tools actually installed in the worker image (Docker-only)
 
 Following the 2026-08-11 finding that no collector tool was actually

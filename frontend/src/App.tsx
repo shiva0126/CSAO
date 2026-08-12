@@ -8,6 +8,8 @@ import { FindingsPage } from '@/pages/Findings'
 import { AssessmentsPage } from '@/pages/Assessments'
 import { ReportsPage } from '@/pages/Reports'
 import { AdminPage } from '@/pages/Admin'
+import { DocsPage } from '@/pages/Docs'
+import { ToolsPage } from '@/pages/Tools'
 
 function FullScreenLoader() {
   return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading…</div>
@@ -47,6 +49,8 @@ export default function App() {
         <Route path="/findings" element={<FindingsPage />} />
         <Route path="/assessments" element={<AssessmentsPage />} />
         <Route path="/reports" element={<ReportsPage />} />
+        <Route path="/docs" element={<DocsPage />} />
+        <Route path="/tools" element={<ToolsPage />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
       </Route>

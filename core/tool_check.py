@@ -9,22 +9,64 @@ from typing import Any, Dict, List
 # scans, and thus the one whose environment this check should reflect --
 # see MIGRATION_LEDGER.md for why the check moved here).
 
+# Per-tool metadata for the Tools page and its in-browser terminal
+# (workbench/api/terminal.py). `help_command` is what the terminal runs
+# first when opened for that tool, so the analyst sees the tool's own
+# --help/usage guide instead of having to know commands up front or type
+# anything to discover them.
+TOOL_USAGE: Dict[str, Dict[str, Any]] = {
+    "aws": {
+        "name": "AWS CLI",
+        "purpose": "Validates AWS credentials/session and is the underlying client every other collector authenticates through.",
+        "help_command": "aws help",
+    },
+    "prowler": {
+        "name": "Prowler",
+        "purpose": "Runs AWS security and compliance checks (CIS, best practices) and reports pass/fail per check.",
+        "help_command": "prowler --help",
+    },
+    "steampipe": {
+        "name": "Steampipe",
+        "purpose": "Exposes AWS resources as SQL-queryable tables via the `aws` plugin, used to run the queries under queries/aws/*.sql.",
+        "help_command": "steampipe query --help",
+    },
+    "cloudsplaining": {
+        "name": "Cloudsplaining",
+        "purpose": "Analyzes IAM policies for privilege-escalation and over-permissive access risks.",
+        "help_command": "cloudsplaining --help",
+    },
+    "cartography": {
+        "name": "Cartography",
+        "purpose": "Maps AWS resource relationships into a Neo4j graph for reachability/blast-radius analysis.",
+        "help_command": "cartography --help",
+    },
+    "access-analyzer": {
+        "name": "IAM Access Analyzer",
+        "purpose": "AWS-native analyzer that finds resources shared with external principals -- no separate binary to install.",
+        "help_command": "aws accessanalyzer help",
+    },
+}
+
 
 def check_external_tools() -> List[Dict[str, Any]]:
     checks = [
-        ("aws", "AWS CLI", ["aws", "--version"], True),
-        ("prowler", "Prowler", ["prowler", "--version"], True),
-        ("steampipe", "Steampipe", ["steampipe", "--version"], True),
-        ("cloudsplaining", "Cloudsplaining", ["cloudsplaining", "--help"], True),
-        ("cartography", "Cartography", ["cartography", "--help"], False),
+        ("aws", ["aws", "--version"], True),
+        ("prowler", ["prowler", "--version"], True),
+        ("steampipe", ["steampipe", "--version"], True),
+        ("cloudsplaining", ["cloudsplaining", "--help"], True),
+        ("cartography", ["cartography", "--help"], False),
     ]
     rows: List[Dict[str, Any]] = []
-    for command, label, version_cmd, required in checks:
-        path = shutil.which(command)
+    for key, version_cmd, required in checks:
+        meta = TOOL_USAGE[key]
+        label = meta["name"]
+        path = shutil.which(key)
         if not path:
             rows.append(
                 {
+                    "key": key,
                     "name": label,
+                    "purpose": meta["purpose"],
                     "installed": False,
                     "compatible": False,
                     "version": "",
@@ -48,7 +90,9 @@ def check_external_tools() -> List[Dict[str, Any]]:
             version = ""
         rows.append(
             {
+                "key": key,
                 "name": label,
+                "purpose": meta["purpose"],
                 "installed": True,
                 "compatible": True,
                 "version": version,
@@ -60,7 +104,9 @@ def check_external_tools() -> List[Dict[str, Any]]:
         )
     rows.append(
         {
+            "key": "access-analyzer",
             "name": "IAM Access Analyzer",
+            "purpose": TOOL_USAGE["access-analyzer"]["purpose"],
             "installed": True,
             "compatible": True,
             "version": "AWS Native",

@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { LayoutDashboard, ShieldAlert, PlayCircle, FileText, Settings } from 'lucide-react'
+import { LayoutDashboard, ShieldAlert, PlayCircle, FileText, Settings, BookOpen, Wrench } from 'lucide-react'
 import { useMe, useLogout } from '@/lib/queries'
 import { Button } from '@/components/ui/button'
 
@@ -8,6 +8,8 @@ const NAV_ITEMS = [
   { to: '/findings', label: 'Findings', icon: ShieldAlert },
   { to: '/assessments', label: 'Assessments', icon: PlayCircle },
   { to: '/reports', label: 'Reports', icon: FileText },
+  { to: '/docs', label: 'Docs', icon: BookOpen },
+  { to: '/tools', label: 'Tools', icon: Wrench },
   { to: '/admin', label: 'Admin', icon: Settings },
 ]
 
