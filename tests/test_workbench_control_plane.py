@@ -7,13 +7,14 @@ import shutil
 
 import pytest
 
-from workbench.control_plane import AccountVault, WorkbenchState, read_json
+from core.tool_check import check_external_tools
+from workbench.control_plane import AccountVault, WorkbenchState, utc_now_iso
 from workbench.runtime import WorkbenchRuntime
 from tests.test_pipeline import REPO_ROOT, run_pipeline
 
 
-def test_account_vault_encrypts_credentials(tmp_path):
-    state_store = WorkbenchState(tmp_path / "state.json")
+def test_account_vault_encrypts_credentials(tmp_path, isolated_state_id):
+    state_store = WorkbenchState(tmp_path / "state.json", state_id=isolated_state_id)
     vault = AccountVault(state_store, key_file=tmp_path / ".secret.key")
 
     account = vault.save_account(
@@ -27,7 +28,11 @@ def test_account_vault_encrypts_credentials(tmp_path):
         }
     )
 
-    state = read_json(tmp_path / "state.json", {})
+    # Reads back through the same public load() the app itself uses --
+    # WorkbenchState persists to Postgres, not the `path` argument, so
+    # reading that path directly (as this test used to) would just see an
+    # empty/nonexistent file regardless of what was actually saved.
+    state = state_store.load()
     stored = state["cloud_accounts"][0]
     assert "super-secret-value" not in stored["credentials_encrypted"]
     assert (
@@ -38,8 +43,8 @@ def test_account_vault_encrypts_credentials(tmp_path):
     assert account["regions"] == ["us-east-1", "us-west-2"]
 
 
-def test_account_vault_trusts_multiple_keys_after_rotation(tmp_path):
-    state_store = WorkbenchState(tmp_path / "state.json")
+def test_account_vault_trusts_multiple_keys_after_rotation(tmp_path, isolated_state_id):
+    state_store = WorkbenchState(tmp_path / "state.json", state_id=isolated_state_id)
     vault = AccountVault(
         state_store,
         key_file=tmp_path / ".secret.key",
@@ -67,8 +72,8 @@ def test_account_vault_trusts_multiple_keys_after_rotation(tmp_path):
     )
 
 
-def test_account_vault_revert_restores_previous_active_key(tmp_path):
-    state_store = WorkbenchState(tmp_path / "state.json")
+def test_account_vault_revert_restores_previous_active_key(tmp_path, isolated_state_id):
+    state_store = WorkbenchState(tmp_path / "state.json", state_id=isolated_state_id)
     vault = AccountVault(
         state_store,
         key_file=tmp_path / ".secret.key",
@@ -92,8 +97,8 @@ def test_account_vault_revert_restores_previous_active_key(tmp_path):
     assert len(reverted["trusted_key_ids"]) == 2
 
 
-def test_account_vault_delete_removes_record(tmp_path):
-    state_store = WorkbenchState(tmp_path / "state.json")
+def test_account_vault_delete_removes_record(tmp_path, isolated_state_id):
+    state_store = WorkbenchState(tmp_path / "state.json", state_id=isolated_state_id)
     vault = AccountVault(state_store, key_file=tmp_path / ".secret.key")
     account = vault.save_account(
         {"name": "Audit", "auth_type": "profile", "profile": "default"}
@@ -104,8 +109,8 @@ def test_account_vault_delete_removes_record(tmp_path):
     assert vault.list_accounts() == []
 
 
-def test_account_vault_preserves_existing_credentials_on_edit(tmp_path):
-    state_store = WorkbenchState(tmp_path / "state.json")
+def test_account_vault_preserves_existing_credentials_on_edit(tmp_path, isolated_state_id):
+    state_store = WorkbenchState(tmp_path / "state.json", state_id=isolated_state_id)
     vault = AccountVault(state_store, key_file=tmp_path / ".secret.key")
     account = vault.save_account(
         {
@@ -132,8 +137,8 @@ def test_account_vault_preserves_existing_credentials_on_edit(tmp_path):
     )
 
 
-def test_account_vault_rejects_invalid_account_id(tmp_path):
-    state_store = WorkbenchState(tmp_path / "state.json")
+def test_account_vault_rejects_invalid_account_id(tmp_path, isolated_state_id):
+    state_store = WorkbenchState(tmp_path / "state.json", state_id=isolated_state_id)
     vault = AccountVault(state_store, key_file=tmp_path / ".secret.key")
 
     with pytest.raises(ValueError):
@@ -147,9 +152,9 @@ def test_account_vault_rejects_invalid_account_id(tmp_path):
         )
 
 
-def test_runtime_settings_and_evidence_path_guard(tmp_path, monkeypatch):
+def test_runtime_settings_and_evidence_path_guard(tmp_path, monkeypatch, isolated_state_id):
     monkeypatch.chdir(tmp_path)
-    runtime = WorkbenchRuntime()
+    runtime = WorkbenchRuntime(state_id=isolated_state_id)
     runtime.save_settings(
         {
             "collectors": ["aws_inventory", "prowler"],
@@ -173,9 +178,9 @@ def test_runtime_settings_and_evidence_path_guard(tmp_path, monkeypatch):
         runtime.resolve_evidence_path("../secrets.txt")
 
 
-def test_access_requirements_view_model_contains_policy_and_markdown(tmp_path, monkeypatch):
+def test_access_requirements_view_model_contains_policy_and_markdown(tmp_path, monkeypatch, isolated_state_id):
     monkeypatch.chdir(tmp_path)
-    runtime = WorkbenchRuntime()
+    runtime = WorkbenchRuntime(state_id=isolated_state_id)
 
     model = runtime.access_requirements_view_model()
 
@@ -204,9 +209,9 @@ def test_access_requirements_view_model_contains_policy_and_markdown(tmp_path, m
     assert model["services_covered"]["required_services"]
 
 
-def test_capability_validation_view_model_defaults_without_accounts(tmp_path, monkeypatch):
+def test_capability_validation_view_model_defaults_without_accounts(tmp_path, monkeypatch, isolated_state_id):
     monkeypatch.chdir(tmp_path)
-    runtime = WorkbenchRuntime()
+    runtime = WorkbenchRuntime(state_id=isolated_state_id)
 
     model = runtime.capability_validation_view_model()
 
@@ -216,9 +221,9 @@ def test_capability_validation_view_model_defaults_without_accounts(tmp_path, mo
     assert isinstance(model["collectors"], list)
 
 
-def test_access_requirements_policy_filters_disabled_collectors(tmp_path, monkeypatch):
+def test_access_requirements_policy_filters_disabled_collectors(tmp_path, monkeypatch, isolated_state_id):
     monkeypatch.chdir(tmp_path)
-    runtime = WorkbenchRuntime()
+    runtime = WorkbenchRuntime(state_id=isolated_state_id)
     runtime.save_settings(
         {
             "collectors": ["aws_inventory", "cloudsplaining"],
@@ -239,9 +244,9 @@ def test_access_requirements_policy_filters_disabled_collectors(tmp_path, monkey
     assert all(row["collector"] in {"AWS Inventory", "Cloudsplaining"} for row in model["permission_matrix"])
 
 
-def test_access_requirements_trust_policy_validation_and_package(tmp_path, monkeypatch):
+def test_access_requirements_trust_policy_validation_and_package(tmp_path, monkeypatch, isolated_state_id):
     monkeypatch.chdir(tmp_path)
-    runtime = WorkbenchRuntime()
+    runtime = WorkbenchRuntime(state_id=isolated_state_id)
 
     model = runtime.access_requirements_view_model(
         trust_account_id="111122223333",
@@ -275,9 +280,9 @@ def test_access_requirements_trust_policy_validation_and_package(tmp_path, monke
         assert any(row["iam_actions"] == ["iam:GetAccountAuthorizationDetails"] for row in matrix_payload)
 
 
-def test_access_requirements_root_trust_remains_supported(tmp_path, monkeypatch):
+def test_access_requirements_root_trust_remains_supported(tmp_path, monkeypatch, isolated_state_id):
     monkeypatch.chdir(tmp_path)
-    runtime = WorkbenchRuntime()
+    runtime = WorkbenchRuntime(state_id=isolated_state_id)
 
     model = runtime.access_requirements_view_model(
         trust_account_id="444455556666",
@@ -289,7 +294,7 @@ def test_access_requirements_root_trust_remains_supported(tmp_path, monkeypatch)
     assert statement["Principal"]["AWS"] == "arn:aws:iam::444455556666:root"
 
 
-def test_report_rows_include_diagnostics_bundle(tmp_path, monkeypatch):
+def test_report_rows_include_diagnostics_bundle(tmp_path, monkeypatch, isolated_state_id):
     monkeypatch.chdir(tmp_path)
     output = Path("output")
     (output / "workbench").mkdir(parents=True, exist_ok=True)
@@ -304,7 +309,7 @@ def test_report_rows_include_diagnostics_bundle(tmp_path, monkeypatch):
         json.dumps(summary), encoding="utf-8"
     )
 
-    runtime = WorkbenchRuntime()
+    runtime = WorkbenchRuntime(state_id=isolated_state_id)
     runtime.refresh()
 
     rows = runtime.report_rows()
@@ -317,9 +322,22 @@ def test_report_rows_include_diagnostics_bundle(tmp_path, monkeypatch):
     assert diagnostics_row["download_href"].startswith("/diagnostics/download?path=")
 
 
-def test_trust_center_view_model_exposes_tool_and_safety_validation(tmp_path, monkeypatch):
+def test_trust_center_view_model_exposes_tool_and_safety_validation(tmp_path, monkeypatch, isolated_state_id):
     monkeypatch.chdir(tmp_path)
-    runtime = WorkbenchRuntime()
+    runtime = WorkbenchRuntime(state_id=isolated_state_id)
+
+    # trust_center_view_model() reads tool_validation from whatever the
+    # worker last reported into this row's tool_status (see
+    # workbench/worker.py's startup hook) -- an isolated, never-reported-to
+    # row has none, by design (the Tools page shows an explicit "no status
+    # reported yet" empty state for exactly this case). Seed it the same
+    # way the real worker does, via check_external_tools(), rather than
+    # asserting content that only existed here because this test used to
+    # accidentally read the real production row's real worker-reported data.
+    runtime.state_store.update(
+        lambda state: {**state, "tool_status": check_external_tools(), "tool_status_checked_at": utc_now_iso()}
+    )
+    runtime.refresh()
 
     model = runtime.trust_center_view_model()
 
@@ -329,7 +347,7 @@ def test_trust_center_view_model_exposes_tool_and_safety_validation(tmp_path, mo
 
 
 def test_threat_detail_handles_fixture_scenarios_without_optional_fields(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, isolated_state_id
 ):
     shutil.copytree(REPO_ROOT / "tests" / "fixtures" / "raw", tmp_path / "output" / "raw")
     for resource_dir in ("checklists", "crown_jewels", "data"):
@@ -353,7 +371,7 @@ def test_threat_detail_handles_fixture_scenarios_without_optional_fields(
 
     run_pipeline()
 
-    runtime = WorkbenchRuntime()
+    runtime = WorkbenchRuntime(state_id=isolated_state_id)
     detail = runtime.detail_context("threat", "TS-011")
 
     assert detail["identifier"] == "TS-011"

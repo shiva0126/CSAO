@@ -10,6 +10,91 @@ Reference docs: `~/Desktop/CSAO_Architecture.md` (as-found architecture),
 
 ---
 
+## 2026-08-12 — Account-vault test isolation fixed at the root cause; stale-artifact cleanup
+
+**Test isolation, fixed properly (not worked around).** The account-vault
+tests looked isolated -- each constructed `WorkbenchState(tmp_path /
+"state.json")` with its own distinct `tmp_path` -- but `WorkbenchState`
+was rewritten during the Postgres migration to always persist to the
+single shared production row (hardcoded `id=1`) regardless of the `path`
+argument, which is kept only for display/logging. Every one of those
+tests, plus every test constructing `WorkbenchRuntime()` (which
+internally builds its own `WorkbenchState()` the same way, zero args),
+was actually reading and writing the real shared database the whole
+time. This is what corrupted production state earlier in the session
+(see the entry below).
+
+Fix: `WorkbenchState.__init__` and `WorkbenchRuntime.__init__` both gained
+a `state_id: int = 1` parameter, threaded through every `load`/`save`/
+`update` call in place of the hardcoded `1`. Default unchanged (`1`) for
+every real call site (`workbench/singletons.py`, `workbench/worker.py`) --
+this is purely additive. Added `tests/conftest.py`'s `isolated_state_id`
+fixture: yields a random id in a range that will never collide with
+production's `1`, and deletes that row in teardown so repeated test runs
+don't leave garbage rows behind either. Updated all 15 tests in
+`tests/test_workbench_control_plane.py` to use it.
+
+One test (`test_trust_center_view_model_exposes_tool_and_safety_validation`)
+had been asserting on `tool_validation` containing "IAM Access Analyzer" --
+that only ever passed because it was reading the real worker's real
+reported status from the shared row. Properly isolated, a fresh row
+correctly has no tool status until something reports one (matching the
+Tools page's own "no status reported yet" empty state). Fixed by seeding
+the isolated row with `check_external_tools()` output first, the same
+way `workbench/worker.py`'s startup hook does it for real, rather than
+asserting content that was only ever present by accident.
+
+**Verified, not assumed:** confirmed the real production row's
+`cloud_accounts` was empty before running the suite, ran all 15 tests
+(all pass), then confirmed the production row was *still* empty
+afterward and the `workbench_state` table still had exactly one row --
+proving each test's row was created and cleaned up without ever touching
+production data.
+
+**Not in scope, left broken and documented rather than silently ignored:**
+`tests/test_workbench_auth.py`'s 4 failures are a different bug --
+`LocalAuthManager(tmp_path / "auth.db")` calls a constructor signature
+that no longer exists (`LocalAuthManager.__init__(self)` takes no path
+now either, same class of migration staleness). These fail at
+construction, before writing anything, so they're inert rather than
+corrupting -- unlike the account-vault tests, fixing the signature alone
+wouldn't be enough; they'd need the same `state_id`-style isolation
+before being fixed, or they'd start corrupting real user/session data
+instead. `tests/test_ui_health.py` is broken more deeply: it tests a
+`DEV_BOOTSTRAP_USERNAME` dev-mode bootstrap-user feature that no longer
+exists anywhere in `workbench/app.py` at all -- the real first-run flow
+is now the `/setup` page creating a real admin account. That's a rewrite
+of a ~390-line test file testing removed functionality, not a quick fix;
+left broken and documented rather than attempted piecemeal.
+
+**Stale-artifact cleanup**, prompted by the same question:
+- Removed `scripts/migrate_sqlite_auth_to_postgres.py` from the repo --
+  its own docstring says "one-time migration... run once"; that migration
+  already happened for this project, and nothing about a fresh clone
+  (which starts straight on Postgres via `install.sh`) will ever need it
+  again.
+- Deleted two confirmed-dead local files on this dev machine (gitignored,
+  never in git, so this has zero effect on a fresh clone either way):
+  `output/workbench/auth.db` (the pre-migration SQLite file -- grepped
+  the entire codebase for `auth.db`/`sqlite3` references first, found
+  none) and `output/workbench/runtime_watchdog.jsonl` (733KB, zero code
+  references anywhere, predates this session). Deliberately did **not**
+  touch `.secret.key`, `.secret.keys.json(.bak)`, or
+  `runtime_status.json(.bak)` -- checked first and confirmed these are
+  still actively read/written (`core/file_utils.py`'s
+  `atomic_write_bytes` refreshes every `.bak` on every write as an
+  ongoing corruption-recovery backup, not one-time migration debris).
+- Fixed real inaccuracies in three docs surfaced by the app's own Docs
+  page (built earlier this session) that still claimed post-migration
+  state lives in `output/workbench/state.json` / `auth.db` -- both
+  false, both now Postgres: `workbench/README.md`, `CONFIGURATION_GUIDE.md`.
+  `INSTALLATION.md`'s native setup steps were also missing the
+  `alembic upgrade head` step entirely (a real functional gap: following
+  those exact steps as written would hit missing-tables errors) and
+  didn't mention `./install.sh` as the simpler path at all.
+
+---
+
 ## 2026-08-12 — Full containerized deploy (`./install.sh`), plus two real bugs found while validating it
 
 User asked for a genuinely turnkey deploy: clone the repo on another

@@ -82,10 +82,22 @@ class WorkbenchState:
 
     `path` is kept as a compatibility attribute (some callers reference it
     for display/logging) but is no longer used for I/O.
+
+    `state_id` defaults to 1 -- the real app's one and only row, unchanged
+    for every production call site (WorkbenchRuntime, worker.py). Tests
+    that need an isolated row (not the shared production one) pass a
+    different id -- see tests/conftest.py's `isolated_state_id` fixture.
+    Before this parameter existed, every `WorkbenchState(tmp_path / ...)`
+    construction in tests/test_workbench_control_plane.py *looked*
+    isolated via a distinct path argument, but `path` was never used for
+    I/O after the Postgres migration -- every one of those tests was
+    silently reading and writing the real production row. See
+    MIGRATION_LEDGER.md for the corruption that caused in practice.
     """
 
-    def __init__(self, path: Path = STATE_FILE):
+    def __init__(self, path: Path = STATE_FILE, state_id: int = 1):
         self.path = path
+        self.state_id = state_id
         self._lock = threading.RLock()
         Base.metadata.create_all(sync_engine, tables=[WorkbenchStateRow.__table__])
 
@@ -105,16 +117,16 @@ class WorkbenchState:
     def load(self) -> Dict[str, Any]:
         with self._lock:
             with SyncSessionLocal() as db:
-                row = db.get(WorkbenchStateRow, 1)
+                row = db.get(WorkbenchStateRow, self.state_id)
                 return self._defaults(dict(row.data) if row else {})
 
     def save(self, state: Dict[str, Any]) -> Dict[str, Any]:
         with self._lock:
             state["updated_at"] = utc_now_iso()
             with SyncSessionLocal() as db:
-                row = db.get(WorkbenchStateRow, 1)
+                row = db.get(WorkbenchStateRow, self.state_id)
                 if row is None:
-                    row = WorkbenchStateRow(id=1, data=state, updated_at=utc_now())
+                    row = WorkbenchStateRow(id=self.state_id, data=state, updated_at=utc_now())
                     db.add(row)
                 else:
                     row.data = state
@@ -125,12 +137,12 @@ class WorkbenchState:
     def update(self, mutator):
         with self._lock:
             with SyncSessionLocal() as db:
-                row = db.get(WorkbenchStateRow, 1, with_for_update=True)
+                row = db.get(WorkbenchStateRow, self.state_id, with_for_update=True)
                 current = self._defaults(dict(row.data) if row else {})
                 updated = mutator(copy.deepcopy(current)) or current
                 updated["updated_at"] = utc_now_iso()
                 if row is None:
-                    row = WorkbenchStateRow(id=1, data=updated, updated_at=utc_now())
+                    row = WorkbenchStateRow(id=self.state_id, data=updated, updated_at=utc_now())
                     db.add(row)
                 else:
                     row.data = updated

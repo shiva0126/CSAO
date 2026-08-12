@@ -354,7 +354,13 @@ class WorkbenchRuntime:
         "runtime_status": "partials/runtime_status.html",
     }
 
-    def __init__(self):
+    def __init__(self, state_id: int = 1):
+        # Defaults to the real app's one production row (id=1) everywhere
+        # this is constructed in actual application code. Tests pass a
+        # different id to avoid reading/writing shared production state --
+        # see tests/conftest.py's `isolated_state_id` fixture and
+        # MIGRATION_LEDGER.md for why this exists.
+        self.state_id = state_id
         self._traceability_engine = None
         self._traceability_signature = None
         self._full_load_signature = None
@@ -372,7 +378,7 @@ class WorkbenchRuntime:
         self.refresh()
 
     def refresh(self, view_name: str = ""):
-        self.state_store = WorkbenchState()
+        self.state_store = WorkbenchState(state_id=self.state_id)
         self.audit = AuditLogger()
         self.account_vault = AccountVault(self.state_store, audit=self.audit)
         self.runner = AssessmentRunner(

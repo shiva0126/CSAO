@@ -32,8 +32,8 @@ The console binds to `http://127.0.0.1:2909`.
 
 - The console uses the existing CSAO engines exactly as the CLI does.
 - The console is designed for read-only customer AWS assessment roles and least-privilege execution.
-- Runtime overrides are persisted in `output/workbench/state.json`.
-- Local users, sessions, and login audit history are stored in `output/workbench/auth.db`.
+- Runtime overrides are persisted in PostgreSQL (`workbench_state` table) — not a JSON file. See `MIGRATION_LEDGER.md` for the migration history.
+- Local users, sessions, and login audit history are stored in PostgreSQL (`users`, `sessions`, `login_audit` tables).
 - Credentials are encrypted with a local Fernet key at `output/workbench/.secret.key`.
 - Assessment snapshots are copied to `output/history/<assessment-id>/`.
 - Archived reports are copied to `output/report_archive/`.

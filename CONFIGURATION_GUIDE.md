@@ -20,7 +20,7 @@ Runtime configuration is managed through the Analyst Console `Settings` page. No
 
 - Baseline configuration: `config/config.yaml`
 - Tool inventory: `config/tools.yaml`
-- Workbench overrides: `output/workbench/state.json`
+- Workbench overrides: PostgreSQL (`workbench_state` table) — not a file. See `MIGRATION_LEDGER.md`.
 
 The UI persists overrides into the workbench state layer and merges them onto the baseline config at runtime.
 
