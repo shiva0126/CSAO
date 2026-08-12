@@ -143,12 +143,15 @@ def access_requirements(
     use_root_trust: bool = False,
     use_external_id: bool = False,
     external_id: str = "",
+    collectors: str = "",
     user=Depends(require_role(ROLE_READ_ONLY)),
 ):
+    collector_keys = [key.strip() for key in collectors.split(",") if key.strip()] if collectors else None
     return runtime.access_requirements_view_model(
         trust_account_id=trust_account_id,
         assessment_role_name=assessment_role_name,
         use_root_trust=use_root_trust,
         use_external_id=use_external_id,
         external_id=external_id,
+        collector_keys=collector_keys,
     )

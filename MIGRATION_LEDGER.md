@@ -10,6 +10,81 @@ Reference docs: `~/Desktop/CSAO_Architecture.md` (as-found architecture),
 
 ---
 
+## 2026-08-12 — Launch-tab IAM policy JSON, scoped to selected collectors and verified read-only
+
+User asked for a section in the Assessments Launch tab that generates a
+copy-paste-ready IAM policy JSON, curated to whichever collectors are
+checked for that specific launch, with an explicit requirement that
+nothing in it may be a write or execute action.
+
+**Found before writing anything new:** `workbench/runtime.py`'s
+`access_requirements_view_model()` already generated a complete,
+well-formed `CSAO_Assessment_ReadOnly` IAM policy from
+`collector_metadata.py`'s permission data, including a validation step
+(`_validate_access_requirements_bundle`) -- it just had no frontend
+consumer, and it scoped by whatever's enabled in `config.yaml` globally,
+not by what's checked in a specific launch form. `LEAST_PRIVILEGE_DESIGN.md`
+already documented this design; the code matched the doc, it just wasn't
+wired into the UI.
+
+**Before generating anything, audited every IAM action already in
+`collector_metadata.py`** (not just trusted the name pattern): extracted
+every unique action verb across all 7 collectors (~90 actions) -- only
+`Describe`, `Get`, `List`, `Search`, and one `Generate` (
+`iam:GenerateCredentialReport`) appear. Verified `GenerateCredentialReport`
+specifically against AWS's own live documentation (fetched directly,
+not from memory): AWS's `IAMReadOnlyAccess` managed policy places it in
+the exact same `Allow` statement as `iam:Get*`/`iam:List*`, confirming AWS
+itself treats it as read-only-safe despite the "Generate" verb. No other
+verb (Put/Create/Update/Delete/Attach/Modify/etc.) exists anywhere in the
+current permission data.
+
+**Changes:**
+- `workbench/runtime.py`: added `_is_read_only_action()` plus
+  `READ_ONLY_ACTION_PREFIXES`/`READ_ONLY_ACTION_EXACT_EXCEPTIONS` as an
+  explicit safety net wired into the existing validation function -- so a
+  future permission added with a non-read verb fails validation loudly
+  instead of silently shipping, rather than relying on "the current data
+  happens to be clean." `access_requirements_view_model()` gained an
+  optional `collector_keys` param: when provided, it overrides the
+  config-enabled set so the generated policy reflects the analyst's
+  actual per-launch selection instead of global config.
+- `workbench/api/assessments.py`: `GET /assessments/access-requirements`
+  now accepts an optional `collectors` query param (comma-separated keys).
+- `pages/Assessments.tsx`: new "Required IAM Permissions" section in the
+  launch form, live-scoped to whichever collector checkboxes are
+  currently selected -- shows the generated policy JSON, a validation
+  badge (visibly fails loud with the exact error if validation ever
+  doesn't pass), copy-to-clipboard, and download-as-.json.
+- `components/CopyButton.tsx`: recreated (had been deleted earlier this
+  session when the Tools page moved from copy-paste commands to a real
+  terminal) -- genuine second use case here.
+
+**Verified, not assumed:** wrote an adversarial test feeding the verb
+checker known write/execute/wildcard actions (`iam:PutRolePolicy`,
+`ec2:TerminateInstances`, `s3:PutObject`, `ec2:*`, etc.) -- all correctly
+rejected, zero false positives against the real read-only action set.
+Confirmed via the live runtime that scoping to different collector
+combinations produces genuinely different, correctly-filtered policies
+(`aws_inventory` alone -> 5 statements; `prowler`+`steampipe` together ->
+20 statements, 81 actions), and that `policy_validation.status` is `PASS`
+in both cases. Ran the 4 pre-existing tests covering this function
+(`test_access_requirements_*`) -- still pass unchanged, confirming the new
+optional parameter doesn't alter default behavior.
+
+**Full regression sweep after this change:** every existing API endpoint
+(dashboard, findings, checklist, threats, attack-paths, risk,
+recommendations, evidence, wizard-defaults, history, reports, accounts,
+settings, users, trust-center, coverage, docs, docs reference tables)
+still returns 200 with correct data. Trust Center / Tools tool-status
+wiring re-verified specifically: all six tools (`aws`, `prowler`,
+`steampipe`, `cloudsplaining`, `cartography`, `access-analyzer`) still
+report `installed: true` with correct `key` fields, and the terminal
+websocket backend still opens a real shell in the worker container and
+responds to commands.
+
+---
+
 ## 2026-08-12 — Pre-push functional review
 
 Before pushing the Docs/Tools/Dashboard work, did a full pass: hit every

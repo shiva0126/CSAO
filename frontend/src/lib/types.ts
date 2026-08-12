@@ -379,3 +379,18 @@ export interface CoverageSummary {
   not_covered: number
   average_coverage: number
 }
+
+export interface IamPolicyValidation {
+  status: 'PASS' | 'FAIL'
+  errors: string[]
+  warnings: string[]
+  policy_size_bytes: number
+  trust_policy_size_bytes: number
+}
+
+export interface AccessRequirementsData {
+  policy: { Version: string; PolicyName: string; Statement: { Sid: string; Effect: string; Action: string[]; Resource: string }[] }
+  policy_json: string
+  policy_validation: IamPolicyValidation
+  enabled_collectors: string[]
+}

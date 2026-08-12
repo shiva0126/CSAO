@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,7 +14,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { CopyButton } from '@/components/CopyButton'
 import {
+  useAccessRequirements,
   useActiveMonitor,
   useAssessmentHistory,
   useCancelAssessment,
@@ -22,6 +25,89 @@ import {
 } from '@/lib/queries'
 import { ApiError } from '@/lib/api'
 import type { AssessmentHistoryItem } from '@/lib/types'
+
+function downloadJson(filename: string, content: string) {
+  const blob = new Blob([content], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function RequiredPermissionsSection({ collectors }: { collectors: string[] }) {
+  const access = useAccessRequirements(collectors)
+
+  if (collectors.length === 0) {
+    return (
+      <div className="space-y-2">
+        <Label className="flex items-center gap-1.5">
+          <ShieldCheck className="size-4" />
+          Required IAM Permissions
+        </Label>
+        <p className="text-xs text-muted-foreground">
+          Select at least one collector above to generate the exact IAM policy this scan needs.
+        </p>
+      </div>
+    )
+  }
+
+  const data = access.data
+  const validation = data?.policy_validation
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label className="flex items-center gap-1.5">
+          <ShieldCheck className="size-4" />
+          Required IAM Permissions
+        </Label>
+        {validation && (
+          <Badge variant={validation.status === 'PASS' ? 'secondary' : 'destructive'}>
+            {validation.status === 'PASS' ? 'Read-only verified' : 'Validation failed'}
+          </Badge>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Curated from the collectors selected above. Every action is verified read-only (Get/List/Describe/Search
+        only, no write or execute permissions) before this is shown. Paste this directly into an IAM policy
+        attached to the role or user this scan will authenticate as.
+      </p>
+
+      {access.isLoading && <p className="text-sm text-muted-foreground">Generating…</p>}
+
+      {validation && validation.status !== 'PASS' && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+          <p className="font-medium">This policy failed safety validation and should not be used:</p>
+          <ul className="list-disc list-inside mt-1">
+            {validation.errors.map((err, i) => (
+              <li key={i}>{err}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {data && (
+        <>
+          <div className="flex gap-2">
+            <CopyButton text={data.policy_json} label="Copy JSON" />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => downloadJson('CSAO_Assessment_ReadOnly.json', data.policy_json)}
+            >
+              Download .json
+            </Button>
+          </div>
+          <pre className="text-xs font-mono bg-muted p-3 rounded-md overflow-x-auto max-h-80 overflow-y-auto">
+            {data.policy_json}
+          </pre>
+        </>
+      )}
+    </div>
+  )
+}
 
 export function AssessmentsPage() {
   const wizard = useWizardDefaults()
@@ -171,6 +257,8 @@ export function AssessmentsPage() {
                   ))}
                 </div>
               </div>
+
+              <RequiredPermissionsSection collectors={collectors} />
 
               {error && <p className="text-sm text-destructive">{error}</p>}
               <Button type="submit" disabled={startAssessment.isPending || !accountId}>

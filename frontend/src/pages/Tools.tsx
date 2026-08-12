@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { TerminalSquare } from 'lucide-react'
+import { ExternalLink, TerminalSquare } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -47,10 +47,27 @@ export function ToolsPage() {
                 <span>Mode: {tool.read_only_mode}</span>
                 <span>{tool.required ? 'Required' : 'Optional'}</span>
               </div>
-              <Button size="sm" variant="outline" onClick={() => setOpenTool({ key: tool.key, name: tool.name })}>
-                <TerminalSquare className="size-4" />
-                Open terminal
-              </Button>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => setOpenTool({ key: tool.key, name: tool.name })}>
+                  <TerminalSquare className="size-4" />
+                  Open terminal
+                </Button>
+                {tool.key === 'cartography' && (
+                  <Button size="sm" variant="outline" asChild>
+                    <a href="http://localhost:7474" target="_blank" rel="noreferrer">
+                      <ExternalLink className="size-4" />
+                      Open Neo4j Browser
+                    </a>
+                  </Button>
+                )}
+              </div>
+              {tool.key === 'cartography' && (
+                <p className="text-xs text-muted-foreground">
+                  Cartography itself is a one-shot sync command with no interactive mode — the terminal is only
+                  useful for running a sync. Everything worth exploring afterward (the resource graph) lives in
+                  Neo4j Browser above.
+                </p>
+              )}
             </CardContent>
           </Card>
         ))}

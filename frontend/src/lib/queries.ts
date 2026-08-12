@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
 import type {
+  AccessRequirementsData,
   AccountRecord,
   AttackPathCatalogRow,
   AttackPathGraph,
@@ -236,5 +237,14 @@ export function useAttackPathCatalog() {
   return useQuery({
     queryKey: ['docs-reference-attack-paths'],
     queryFn: () => api.get<{ rows: AttackPathCatalogRow[] }>('/docs/reference/attack-paths'),
+  })
+}
+
+export function useAccessRequirements(collectorKeys: string[]) {
+  const qs = collectorKeys.length ? `?collectors=${collectorKeys.join(',')}` : ''
+  return useQuery({
+    queryKey: ['access-requirements', collectorKeys],
+    queryFn: () => api.get<AccessRequirementsData>(`/assessments/access-requirements${qs}`),
+    enabled: collectorKeys.length > 0,
   })
 }

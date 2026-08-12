@@ -47,6 +47,7 @@ from workbench.control_plane import (
 )
 from workbench.collector_metadata import (
     CAPABILITY_VALIDATION_TARGETS,
+    COLLECTOR_METADATA,
     collector_metadata_rows,
     enabled_collector_keys,
 )
@@ -57,6 +58,26 @@ IAM_POLICY_CHARACTER_LIMIT = 6144
 IAM_TRUST_POLICY_CHARACTER_LIMIT = 2048
 DEFAULT_ASSESSMENT_ROLE_NAME = "CSAO-Assessor"
 DEFAULT_TRUST_ACCOUNT_ID = "123456789012"
+
+# Every action every collector requests must be read-only. Verified against
+# AWS's own Service Authorization Reference: Get*/List*/Describe* are always
+# "Read"/"List" access level; "Search" was confirmed Read for the one action
+# that uses it here (resource-explorer-2:Search). GenerateCredentialReport is
+# the one exception that doesn't fit the Get/List/Describe pattern -- AWS's
+# own IAMReadOnlyAccess managed policy places it in the same statement as
+# iam:Get*/iam:List*, confirming AWS itself treats it as read-only-safe
+# despite the "Generate" verb. Nothing else is allow-listed: a future
+# collector permission using any other verb (Put/Create/Update/Delete/
+# Attach/Modify/etc.) fails validation rather than silently shipping.
+READ_ONLY_ACTION_PREFIXES = ("Get", "List", "Describe", "Search")
+READ_ONLY_ACTION_EXACT_EXCEPTIONS = {"iam:GenerateCredentialReport"}
+
+
+def _is_read_only_action(action: str) -> bool:
+    if action in READ_ONLY_ACTION_EXACT_EXCEPTIONS:
+        return True
+    _, _, verb = action.partition(":")
+    return verb.startswith(READ_ONLY_ACTION_PREFIXES)
 SUMMARY_SCOPE_BY_SERVICE = {
     "IAM": "Read Configuration",
     "Organizations": "Read Configuration",
@@ -1900,12 +1921,21 @@ class WorkbenchRuntime:
                 if statement.get("Resource") != "*":
                     errors.append(f"IAM policy statement {index} must target Resource '*'.")
                 invalid_actions = []
+                non_read_only_actions = []
                 for action in normalized_actions:
                     if "*" in action or action not in known_actions:
                         invalid_actions.append(action)
+                    if not _is_read_only_action(action):
+                        non_read_only_actions.append(action)
                 if invalid_actions:
                     errors.append(
                         f"IAM policy statement {index} contains invalid actions: {', '.join(sorted(dict.fromkeys(invalid_actions)))}."
+                    )
+                if non_read_only_actions:
+                    errors.append(
+                        f"IAM policy statement {index} contains non-read-only actions: "
+                        f"{', '.join(sorted(dict.fromkeys(non_read_only_actions)))}. "
+                        "Only Get/List/Describe/Search actions (and iam:GenerateCredentialReport) are permitted."
                     )
 
         trust_statements = trust_policy.get("Statement", [])
@@ -2086,6 +2116,7 @@ class WorkbenchRuntime:
         use_root_trust: bool = False,
         use_external_id: bool = False,
         external_id: str = "",
+        collector_keys: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         read_only_guarantee = [
             "CSAO never modifies AWS resources.",
@@ -2120,9 +2151,17 @@ class WorkbenchRuntime:
                 "a": "Organization-scoped context becomes limited, but the account-level assessment can still proceed.",
             },
         ]
-        enabled = set(enabled_collector_keys(self.config))
-        grouped: Dict[str, Dict[str, Any]] = {}
         collector_rows = collector_metadata_rows(self.config)
+        if collector_keys is not None:
+            # Scoped to whatever the analyst actually checked in the launch
+            # form for this assessment, not the collectors enabled globally
+            # in config.yaml -- those are two different sets of "enabled".
+            enabled = {key for key in collector_keys if key in COLLECTOR_METADATA}
+            for collector in collector_rows:
+                collector["enabled"] = collector["key"] in enabled
+        else:
+            enabled = set(enabled_collector_keys(self.config))
+        grouped: Dict[str, Dict[str, Any]] = {}
         for collector in collector_rows:
             if not collector["enabled"]:
                 continue

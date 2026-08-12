@@ -24,6 +24,13 @@ MUTATING_PREFIXES = (
 ALLOWED_SPECIAL_CALLS = {
     "assume_role",
     "get_caller_identity",
+    # SQLAlchemy schema-management calls (Base.metadata.create_all/drop_all),
+    # not AWS API calls -- "base" is in the allowed-roots set below so this
+    # gets inspected rather than skipped, but "create_all" starting with the
+    # "create" mutating prefix is a false positive against the local
+    # Postgres schema, not customer AWS.
+    "create_all",
+    "drop_all",
 }
 
 AWS_EXECUTION_FILES = [
