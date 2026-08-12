@@ -1,0 +1,78 @@
+{% import "_macros.html" as ui %}
+{% include "partials/assessment_workspace_tabs.html" %}
+<div class="panel mb-3">
+  <div class="panel-header">
+    <h4>Findings Register</h4>
+    <div class="text-secondary">Analyst validation status controls which findings appear in deliverables by default.</div>
+  </div>
+  <form class="filter-bar" method="get" hx-get="/register" hx-target="#workbench-content" hx-push-url="true">
+    <input class="form-control form-control-sm" type="search" name="search" placeholder="Search" value="{{ filters.search }}">
+    <label><input type="checkbox" name="high_risk" value="1" {% if filters.high_risk %}checked{% endif %}> High Risk</label>
+    <label><input type="checkbox" name="needs_review" value="1" {% if filters.needs_review %}checked{% endif %}> Needs Review</label>
+    <label><input type="checkbox" name="manual_validation" value="1" {% if filters.manual_validation %}checked{% endif %}> Manual Validation</label>
+    <label><input type="checkbox" name="crown_jewel" value="1" {% if filters.crown_jewel %}checked{% endif %}> Crown Jewel</label>
+    <label><input type="checkbox" name="internet_facing" value="1" {% if filters.internet_facing %}checked{% endif %}> Internet Facing</label>
+    <button class="btn btn-sm btn-primary" type="submit">Filter</button>
+  </form>
+</div>
+
+<div class="panel table-responsive">
+  <table class="table table-hover align-middle">
+    <thead>
+      <tr>
+        <th>Finding ID</th>
+        <th>Severity</th>
+        <th>Cloud Service</th>
+        <th>Resource</th>
+        <th>Evidence</th>
+        <th>Risk</th>
+        <th>Validation</th>
+        <th>Notes</th>
+        <th>Threats / Evidence</th>
+        <th>Save</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td class="fw-semibold">{{ row.finding_id }}</td>
+        <td>{{ ui.status_badge(row.severity) }}</td>
+        <td>{{ row.cloud_service }}</td>
+        <td>
+          <div class="fw-semibold">{{ row.resource }}</div>
+          <div class="small text-secondary">{{ row.register_id }}</div>
+          <div class="small text-secondary">{{ row.checklist_controls | join(', ') }}</div>
+        </td>
+        <td class="text-truncate" style="max-width: 220px;">{{ row.evidence }}</td>
+        <td>{{ row.risk }}</td>
+        <td style="min-width: 180px;">
+          {% if role_analyst %}
+          <form hx-post="/api/register/{{ row.register_id }}/validate"
+                hx-target="#workbench-content"
+                hx-swap="innerHTML">
+            <input type="hidden" name="search" value="{{ filters.search }}">
+            <select class="form-select form-select-sm" name="validation_status">
+              {% for status in validation_statuses %}
+              <option value="{{ status }}" {% if row.status == status %}selected{% endif %}>{{ status }}</option>
+              {% endfor %}
+            </select>
+        </td>
+        <td style="min-width: 220px;">
+            <input class="form-control form-control-sm" type="text" name="analyst_notes" value="{{ row.analyst_notes }}" placeholder="Analyst notes">
+        </td>
+        <td style="min-width: 240px;">
+          <div class="small text-secondary">{{ row.scenario_titles | join(', ') if row.scenario_titles else 'No linked scenarios' }}</div>
+          <div class="small text-secondary mt-1">{{ row.evidence }}</div>
+        </td>
+        <td>
+            <button class="btn btn-sm btn-outline-primary" type="submit">Save</button>
+          </form>
+          {% else %}
+          <div>{{ row.status }}</div>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

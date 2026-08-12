@@ -1,0 +1,7 @@
+[
+    {
+        "instance_id": "i-12345",
+        "public_ip": "1.2.3.4",
+        "region": "us-east-1"
+    }
+]

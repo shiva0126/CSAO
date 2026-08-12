@@ -1,0 +1,46 @@
+{% include "partials/assessment_workspace_tabs.html" %}
+<div class="panel">
+  <div class="panel-header">
+    <h4>Attack Paths</h4>
+    <div class="text-secondary">Interactive graph built from existing attack-path candidates.</div>
+  </div>
+  <div id="attack-path-graph"
+       class="graph-surface"
+       data-graph='{{ graph | tojson }}'></div>
+</div>
+
+<div class="panel mt-3">
+  <div class="table-responsive">
+    <table class="table table-sm">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Entry Point</th>
+          <th>Crown Jewel</th>
+          <th>Hop Count</th>
+          <th>Threats</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for candidate in graph.candidates %}
+        <tr class="clickable-row"
+            hx-get="/api/path/{{ candidate.id }}"
+            hx-target="#detail-body"
+            hx-swap="innerHTML"
+            data-bs-toggle="offcanvas"
+            data-bs-target="#detailCanvas">
+          <td>{{ candidate.id }}</td>
+          <td>{{ candidate.entry_point }}</td>
+          <td>{{ candidate.crown_jewel_target }}</td>
+          <td>{{ candidate.hop_count }}</td>
+          <td>{{ candidate.correlated_threats | join(', ') }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5" class="text-secondary">No attack-path candidates are available for the current assessment output.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>

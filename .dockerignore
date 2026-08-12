@@ -1,0 +1,20 @@
+# Without this file, `docker build`/`docker compose build` sends the ENTIRE
+# project directory as build context on every build -- including the ~540MB
+# native venv/ and ~290MB frontend/node_modules/, neither of which the
+# Docker image needs (it installs its own Python deps via requirements.txt
+# and doesn't run the frontend build). A build that appeared to hang for
+# 30+ minutes with zero visible build-step activity turned out to just be
+# stuck transferring this multi-hundred-MB context before the build had
+# even started. See MIGRATION_LEDGER.md.
+
+venv/
+frontend/node_modules/
+frontend/dist/
+output/
+logs/
+cache/
+inventory/
+temp/
+__pycache__/
+*.pyc
+.pytest_cache/

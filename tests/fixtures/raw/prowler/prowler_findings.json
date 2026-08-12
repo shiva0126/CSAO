@@ -1,0 +1,14 @@
+[
+    {
+        "CheckID": "ec2_instance_public_ip",
+        "CheckTitle": "EC2 instance has a public IP address",
+        "ServiceName": "ec2",
+        "ResourceId": "i-12345",
+        "ResourceName": "i-12345",
+        "ResourceType": "AwsEc2Instance",
+        "Severity": "high",
+        "Region": "us-east-1",
+        "AccountId": "111122223333",
+        "Description": "Instance is directly reachable from the internet"
+    }
+]

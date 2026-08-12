@@ -1,0 +1,20 @@
+[Unit]
+Description=CSAO Analyst Console
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__RUN_AS_USER__
+Group=__RUN_AS_GROUP__
+WorkingDirectory=__ROOT_DIR__
+Environment=PYTHONUNBUFFERED=1
+Environment=CSAO_HOST=127.0.0.1
+Environment=CSAO_PORT=2909
+ExecStart=__ROOT_DIR__/scripts/run_workbench.sh
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

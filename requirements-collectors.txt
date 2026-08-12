@@ -1,0 +1,20 @@
+###############################################################################
+# Collector tool Python packages -- Docker worker image ONLY.
+#
+# Deliberately NOT merged into requirements.txt: these are only needed by
+# the process that actually executes scans (workbench/worker.py, run inside
+# the `worker` service in docker-compose.yml). The native venv used for
+# `workbench.serve` / local development does not need them.
+###############################################################################
+
+prowler
+cloudsplaining
+cartography
+# Cartography's Okta integration module is written against the pre-1.0
+# okta-sdk-python API (okta.framework.OktaError) and was never updated for
+# the modern SDK's rewritten module layout -- without this pin, `import
+# cartography.sync` (triggered by every `cartography` CLI invocation,
+# regardless of whether Okta is actually used) fails with
+# ModuleNotFoundError. See https://github.com/lyft/cartography/issues/459
+# and https://github.com/okta/okta-sdk-python/issues/122.
+okta==0.0.4

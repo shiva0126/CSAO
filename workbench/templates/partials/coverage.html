@@ -1,0 +1,45 @@
+{% include "partials/assessment_workspace_tabs.html" %}
+<div class="panel mb-3">
+  <div class="panel-header">
+    <div>
+      <h4 class="mb-1">Assessment Coverage Report</h4>
+      <div class="text-secondary">Domain-level control coverage across automated and manual validation paths.</div>
+    </div>
+  </div>
+  <div class="account-summary">
+    <div class="summary-card"><div class="metric-label">Domains</div><div class="metric-value">{{ coverage.domains }}</div></div>
+    <div class="summary-card"><div class="metric-label">Implemented Controls</div><div class="metric-value">{{ coverage.implemented_controls }}</div></div>
+    <div class="summary-card"><div class="metric-label">Automatically Validated</div><div class="metric-value">{{ coverage.automatically_validated }}</div></div>
+    <div class="summary-card"><div class="metric-label">Manual Validation Required</div><div class="metric-value">{{ coverage.manual_validation_required }}</div></div>
+    <div class="summary-card"><div class="metric-label">Not Covered</div><div class="metric-value">{{ coverage.not_covered }}</div></div>
+    <div class="summary-card"><div class="metric-label">Average Coverage</div><div class="metric-value">{{ coverage.average_coverage }}%</div></div>
+  </div>
+</div>
+<div class="panel table-responsive">
+  <table class="table table-hover align-middle">
+    <thead>
+      <tr>
+        <th>Assessment Domain</th>
+        <th>Implemented Controls</th>
+        <th>Automatically Validated</th>
+        <th>Manual Validation Required</th>
+        <th>Not Covered</th>
+        <th>Coverage Percentage</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in coverage.rows %}
+      <tr>
+        <td>{{ row.domain }}</td>
+        <td>{{ row.implemented_controls }}</td>
+        <td>{{ row.automatically_validated }}</td>
+        <td>{{ row.manual_validation_required }}</td>
+        <td>{{ row.not_covered }}</td>
+        <td>{{ row.coverage_percentage }}%</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="text-secondary">No coverage data available yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

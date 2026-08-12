@@ -1,0 +1,83 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: csao_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: csao
+      POSTGRES_USER: csao
+      POSTGRES_PASSWORD: ${CSAO_DB_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - csao_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U csao -d csao"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  adminer:
+    image: adminer:latest
+    container_name: csao_adminer
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    container_name: csao_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - csao_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  neo4j:
+    image: neo4j:5-community
+    container_name: csao_neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/password
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - csao_neo4jdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  worker:
+    build: .
+    container_name: csao_worker
+    restart: unless-stopped
+    command: arq workbench.worker.WorkerSettings
+    working_dir: /app
+    volumes:
+      - .:/app
+    environment:
+      DATABASE_URL_SYNC: postgresql+psycopg://csao:${CSAO_DB_PASSWORD}@postgres:5432/csao
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      neo4j:
+        condition: service_started
+
+volumes:
+  csao_pgdata:
+  csao_redisdata:
+  csao_neo4jdata:

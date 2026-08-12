@@ -1,0 +1,75 @@
+{% import "_macros.html" as ui %}
+{% include "partials/assessment_workspace_tabs.html" %}
+<div class="panel table-responsive">
+  <div class="panel-header">
+    <div>
+      <h4 class="mb-1">Deliverables</h4>
+      <div class="text-secondary">Preview, download, regenerate, archive, and review consultant-ready assessment deliverables.</div>
+    </div>
+  </div>
+  <table class="table table-hover align-middle">
+    <thead>
+      <tr>
+        <th>Deliverable Type</th>
+        <th>Report</th>
+        <th>Generation Time</th>
+        <th>Size</th>
+        <th>Version History</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      {% set report_text = ((row.title or '') ~ ' ' ~ (row.name or '')) | lower %}
+      {% set deliverable_type = 'Technical Report' %}
+      {% if 'executive' in report_text %}
+        {% set deliverable_type = 'Executive Report' %}
+      {% elif 'evidence' in report_text %}
+        {% set deliverable_type = 'Evidence Package' %}
+      {% elif 'register' in report_text %}
+        {% set deliverable_type = 'Assessment Register' %}
+      {% elif 'workbook' in report_text or 'xlsx' in report_text %}
+        {% set deliverable_type = 'Workbook Export' %}
+      {% elif 'json' in report_text %}
+        {% set deliverable_type = 'JSON Export' %}
+      {% elif 'diagnostic' in report_text %}
+        {% set deliverable_type = 'Diagnostics Bundle' %}
+      {% endif %}
+      <tr{% if row.previewable is not defined or row.previewable %}
+          class="clickable-row"
+          hx-get="/api/report/{{ row.name }}"
+          hx-target="#detail-body"
+          hx-swap="innerHTML"
+          data-bs-toggle="offcanvas"
+          data-bs-target="#detailCanvas"
+          {% endif %}>
+        <td>{{ deliverable_type }}</td>
+        <td>{{ row.title }}<div class="small text-secondary">{{ row.name }}</div></td>
+        <td>{{ row.generated_at }}</td>
+        <td>{{ row.size }} bytes</td>
+        <td>
+          <div class="small">{{ row.version_count }} assessment version(s)</div>
+          <div class="small text-secondary">{{ row.archived_versions | length }} archived copy/copies</div>
+        </td>
+        <td class="text-nowrap">
+          {% if row.previewable is not defined or row.previewable %}
+          <a class="btn btn-sm btn-outline-primary" href="/reports/{{ row.name }}" target="_blank">Preview</a>
+          <a class="btn btn-sm btn-outline-secondary" href="/reports/{{ row.name }}" download>Download</a>
+          {% else %}
+          <a class="btn btn-sm btn-outline-secondary" href="{{ row.download_href }}">Download</a>
+          {% endif %}
+          {% if role_analyst and (row.previewable is not defined or row.previewable) %}
+          <button class="btn btn-sm btn-outline-success" hx-post="/api/stages/reporting/retry" hx-target="#report-result" hx-swap="innerHTML">Regenerate</button>
+          <button class="btn btn-sm btn-outline-dark" hx-post="/api/reports/{{ row.name }}/archive" hx-target="#workbench-content" hx-swap="innerHTML">Archive</button>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="6" class="text-secondary">No reports are available for the current assessment output.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div id="report-result" class="mt-3"></div>

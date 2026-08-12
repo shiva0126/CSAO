@@ -1,0 +1,503 @@
+# CSAO Stack Replacement — Migration Ledger
+
+Running log of the architecture replacement (fake FastAPI shim + SQLite/JSON →
+real FastAPI + PostgreSQL + [later] ARQ job queue + TypeScript/React
+frontend). Newest entry on top. Don't rewrite prior entries — append a new
+dated one describing what changed and current status.
+
+Reference docs: `~/Desktop/CSAO_Architecture.md` (as-found architecture),
+`~/Desktop/CSAO_TechStack_Proposal.md` (approved target stack, phased plan).
+
+---
+
+## 2026-08-12 — Collector tools actually installed in the worker image (Docker-only)
+
+Following the 2026-08-11 finding that no collector tool was actually
+installed anywhere, the user asked to install Prowler/Steampipe/
+Cloudsplaining/Cartography/AWS CLI for real, with installation automatic
+for anyone who deploys this (not a manual per-machine setup step). Scoped
+to the Docker `worker` image only (native `workbench.serve` stays
+Python+boto3-only) since that's the only process that executes scans.
+
+**What changed:**
+- `requirements-collectors.txt` (new): `prowler`, `cloudsplaining`,
+  `cartography`, pinned `okta==0.0.4`.
+- `Dockerfile`: installs AWS CLI v2 and Steampipe from the official
+  release artifacts, arch-aware (`TARGETARCH`).
+- `docker-compose.yml`: added a `neo4j` service (Cartography's graph
+  store); `worker` now depends on it.
+- `config/config.yaml`: `cartography` enabled, `neo4j_uri` pointed at the
+  compose service hostname.
+- `core/tool_check.py` (new): shared `check_external_tools()`, used by
+  both `runtime.py:external_tool_validation()` and the worker's new
+  `startup()` hook.
+- `workbench/worker.py`: `startup(ctx)` now actually does something — runs
+  `check_external_tools()` once per worker start and writes the result
+  into `workbench_state.tool_status` / `tool_status_checked_at`.
+- `runtime.py` / `trust_center_view_model()`: reads tool status from that
+  stored state instead of calling `shutil.which()` live from whichever
+  process serves the request — fixes a real bug where Trust Center was
+  checking the *web* host's tools, not the *worker's* (the process that
+  actually runs scans).
+- Frontend: Trust Center shows a "last checked" timestamp sourced from
+  `tool_status_checked_at`, and an empty-state message if the worker
+  hasn't reported yet.
+
+**Bugs found and fixed while getting the build green:**
+
+1. **Steampipe silently never installed.** Original install used
+   `sh -c "$(curl -fsSL https://steampipe.io/install/steampipe.sh)"`. If
+   curl fails transiently, that pattern runs `sh -c ""` — trivially exits
+   0, installs nothing, and the build reports success. Confirmed via
+   `find / -iname 'steampipe*'` on the deployed container finding zero
+   binaries. Fixed by downloading to a file, asserting non-empty, then
+   executing — a real failure now fails the build loudly instead of
+   silently no-op'ing.
+2. **Cartography `ModuleNotFoundError: No module named 'okta.framework'`.**
+   Cartography's Okta integration imports the pre-1.0 okta-sdk-python
+   layout (`okta.framework.OktaError`), which the modern `okta` package no
+   longer has — breaks on `import cartography.sync`, triggered by every
+   `cartography` invocation regardless of whether Okta is used. Fixed by
+   pinning `okta==0.0.4` (last version with the legacy layout). See
+   https://github.com/lyft/cartography/issues/459 and
+   https://github.com/okta/okta-sdk-python/issues/122.
+3. **~30 minute apparent build "hang" with zero visible activity.** No
+   `.dockerignore` existed, so every build sent the entire project
+   directory as build context, including `venv/` (538MB) and
+   `frontend/node_modules/` (286MB) — neither needed by the image.
+   Added `.dockerignore`; context transfer dropped from 100+MB to under
+   1MB. This was the actual cause of what looked like a stalled build.
+4. **Image built successfully but stayed untagged/dangling.** First
+   green build didn't get tagged `csao-main-worker:latest` automatically.
+   Fixed by manually tagging the dangling image, then
+   `docker compose up -d --force-recreate worker`. Later rebuilds tagged
+   correctly on their own.
+5. **Colima VM crashed mid-build, taking every container down at once** —
+   CSAO's and, coincidentally, the user's unrelated `blazeup-aisec`
+   project's, all with mixed exit codes within the same minute. Traced to
+   sustained CPU/memory contention on the shared VM (both projects'
+   containers competing for 4 CPU / 8GiB). Left the VM's network in a
+   state where `raw.githubusercontent.com`'s Fastly CDN range was
+   unreachable from inside the VM while working fine from the host
+   directly and for every other destination tested (`github.com`,
+   `pypi.org`) — a stale post-crash routing/network-namespace issue, not
+   a real outage. Fixed with the user's explicit go-ahead: `colima
+   restart` (didn't disrupt the `aisec-*` containers further since they
+   were already down from the crash).
+6. **Even after the Colima restart, Steampipe's official install script
+   still failed** — once past the DNS/routing leg, its own single-shot,
+   no-retry curl to fetch the release binary from
+   `objects.githubusercontent.com` hit a mid-handshake TLS EOF, consistent
+   with an MTU/packet-loss interaction with HTTP/2 framing on this VM's
+   network path. Rather than depend on the upstream script's fragile
+   networking, replaced it entirely: fetch the release tarball directly
+   with the same retry-and-verify pattern used for AWS CLI, with
+   `--http1.1` forced to avoid the HTTP/2 framing issue.
+7. **Steampipe refuses to run as root**, and the whole image (and the
+   `worker` compose service) runs as root with no `user:` override —
+   would have broken not just `plugin install` at build time but every
+   `steampipe query` call at actual scan time
+   (`modules/steampipe_runner.py`). Rearchitecting the whole container to
+   run non-root wasn't viable without also fixing write access to the
+   root-owned bind-mounted `output/`/`logs/`/`cache/` directories, so
+   instead: a dedicated `steampipe` user (UID 10001, its own `$HOME`
+   outside the bind mount) runs only the steampipe binary. `steampipe` on
+   `$PATH` is now a `setpriv`-based wrapper that drops privileges before
+   exec'ing the real binary (renamed to `steampipe-bin`) — every existing
+   `subprocess.run(["steampipe", ...])` call site keeps working
+   unmodified, no application code changed.
+
+**Verified in the running worker container:** `aws --version`, `prowler
+--version`, `cloudsplaining --help`, `cartography --help`, `steampipe
+--version`, and `steampipe plugin list` all work; the `aws` plugin shows
+installed. `workbench_state.tool_status` in Postgres shows all six tools
+(AWS CLI, Prowler, Steampipe, Cloudsplaining, Cartography, IAM Access
+Analyzer) as `installed: true` with a fresh `tool_status_checked_at`.
+Confirmed the same data reaches `GET /api/v1/trust-center` end to end
+(verified via a temporary session token inserted directly into Postgres
+and deleted immediately after).
+
+**Not yet done:** the user has not been asked to restart their `aisec-*`
+containers (stopped by the Colima crash, not by anything done here) —
+that's their call, left alone deliberately.
+
+---
+
+## 2026-08-11 — Post-Phase-3 fix: Trust Center / collector "theory docs" gap
+
+After the user confirmed the new `/app` UI loads, they reported not being
+able to find tool-status/documentation info they expected, and asked
+whether Prowler and the other collector tools were actually loaded. Two
+real things, not user error:
+
+1. **Confirmed directly**: none of Prowler, Steampipe, Cloudsplaining,
+   Cartography, or the `aws` CLI are installed on this machine (`command -v`
+   for each returns nothing). Only the Python framework + boto3 work today.
+   `runtime.py:external_tool_validation()` already checks this via
+   `shutil.which()` and was already wired into `trust_center_view_model()`
+   (and thus already exposed at `GET /api/v1/trust-center`) — the backend
+   was never the problem.
+2. **Real frontend gap**: the Admin → Trust Center tab and the Assessments
+   wizard's collector picker both existed from Phase 3 but the Trust Center
+   tab rendered `JSON.stringify(data, null, 2)` as a raw blob instead of an
+   actual UI, and the collector picker only showed bare `key`/`label`
+   toggle buttons, discarding `description`/`permissions`/`services`/
+   `mitre_mapping` that `collector_catalog()` already returns. Fixed:
+   Trust Center now renders a proper tool-installation-status table
+   (installed/version/read-only-mode/required per tool — this is where
+   "is Prowler loaded" is answered), the read-only guarantee list, safety
+   validation status, a permission matrix table, and the FAQ. The
+   assessment wizard's collector picker now shows each tool's description
+   and services inspected instead of a bare label.
+
+No backend changes were needed — `types.ts` gained `CollectorInfo`,
+`ToolValidationRow`, `PermissionMatrixRow`, `TrustCenterData` interfaces
+matching the real API response (inspected via a scoped temp session before
+writing the types, same discipline as the rest of Phase 3).
+
+---
+
+## 2026-08-11 — Phase 3: JSON API + React/TypeScript SPA, consolidated IA
+
+**Status: backend + frontend built and verified via HTTP/API testing. SPA is
+served additively at `/app` alongside the untouched legacy UI at `/` — NOT
+yet cut over as the default. See "What's deliberately not done" below.**
+
+Trigger: after Phase 2, the user said the app still didn't feel "stable"
+and asked for research on how other tools structure their UI. That surfaced
+that CSAO's ~19-page nav was the same "one screen per backend
+endpoint/engine" anti-pattern the user had already diagnosed and fixed on
+another project (`blazeup-aispm-ui-consolidation` memory: collapse to one
+page + a detail drawer). Wiz/Orca/AWS Security Hub research confirmed the
+same pattern industry-wide. Approved direction: consolidate to Dashboard,
+one Findings Workspace (table + drawer replacing 8 separate facet pages),
+Assessments, Reports, Admin — and rebuild the frontend in TypeScript/React
+per the original tech-stack proposal, rather than a 1:1 template port.
+
+### Backend: `workbench/api/` (JSON layer, strangler-fig alongside old HTML routes)
+
+- Extracted `workbench/singletons.py` (shared `runtime`/`auth_manager`
+  instances) so the new `workbench/api/*.py` routers and the legacy
+  `workbench/app.py` HTML routes don't need to import each other
+  (avoids a circular import).
+- New routers, all thin JSON wrappers around **existing, unchanged**
+  `workbench/runtime.py` methods — no new business logic:
+  `auth.py` (login/logout/me/setup/password), `dashboard.py`,
+  `findings.py` (findings + checklist + threats + attack-paths + risk +
+  recommendations + evidence — co-located since they're all facets shown in
+  the same drawer), `assessments.py`, `accounts.py`, `admin.py`
+  (settings + users), `reports.py`. 40 endpoints total, mounted at
+  `/api/v1/*`.
+- `workbench/api/deps.py`: `get_current_user`/`require_role()` FastAPI
+  dependencies returning real 401/403 JSON (not redirects) — the SPA reads
+  `must_change_password` from `/auth/me` and routes client-side instead of
+  the old path-allowlist approach.
+- Exact response shapes for every `runtime.py` view-model method
+  (`dashboard()`, `register_rows()`, `checklist_rows()`, `scenario_rows()`,
+  `attack_path_graph()`, `risk_rows()`, `recommendation_rows()`,
+  `report_rows()`, `account_records()`, `assessment_wizard_view_model()`,
+  etc.) were extracted via a dedicated investigation before writing any
+  frontend code, rather than guessing shapes from route code — this caught
+  a real serialization bug in `register_rows()` (it embeds raw
+  `Finding`/`RegisterEntry` dataclass instances under `row["finding"]`/
+  `row["entry"]` for Jinja convenience; the API layer drops those two keys)
+  and confirmed `report_rows()` is HTML-only today (globs `*.html`; no
+  PDF/CSV fan-out exists despite `config.yaml`'s `generate_pdf`/
+  `generate_csv` flags) — this directly resolved the "theory PDF dropdown"
+  ambiguity: after two rounds of clarification, the user confirmed it meant
+  a **MITRE ATT&CK technique/framework reference dropdown on findings**, not
+  a report-format picker.
+
+### Frontend: `frontend/` — Vite + React 18 + TypeScript
+
+- shadcn/ui (Nova preset, Radix base) + Tailwind v4 + TanStack Query +
+  React Router + Recharts. One real gotcha: `npx shadcn@latest init` wrote
+  every component into a literal `./@/` directory at the project root
+  instead of resolving the path alias to `./src` — had to move the files
+  manually. Also hit a zsh footgun during verification: `for path in ...`
+  as a loop variable name silently clobbers zsh's special `$path` array
+  (mirrors `$PATH`), breaking `curl` mid-loop — not a bug in the app, just
+  a shell scripting trap worth remembering.
+- Consolidated IA implemented: `/dashboard` (KPI cards + severity chart),
+  `/findings` (one filterable table + a `Sheet` drawer with tabs: Overview,
+  Checklist, Threats, Attack Paths, Risk, Recommendations, Evidence, plus a
+  **Framework Reference dropdown** aggregating MITRE tactics/techniques from
+  the finding's matched checklist controls and threat scenarios, linking out
+  to `attack.mitre.org`), `/assessments` (launch wizard + live progress via
+  2.5s polling of `/assessments/active` + history table), `/reports`,
+  `/admin` (tabs: Accounts/Settings/Users/Trust Center — Trust Center folded
+  in per the consolidation plan instead of staying a separate nav item).
+- Auth: cookie-based, same-origin, matching Phase 1's session mechanism
+  exactly — `fetch(..., { credentials: 'include' })`, no token storage, no
+  CORS. Vite dev server proxies `/api` to `127.0.0.1:2909` for local dev.
+- Production build served by FastAPI at `/app` (`SPA_DIST_DIR` mount in
+  `workbench/app.py`) — required `base: '/app/'` in `vite.config.ts` (build
+  only, dev server stays at `/`) and `basename={import.meta.env.PROD ? '/app' : '/'}`
+  on `BrowserRouter` so asset paths and client-side routing both resolve
+  correctly once served under a sub-path instead of domain root.
+
+### Verification performed (HTTP/API-level — see "not done" below for the gap)
+
+- All 40 `/api/v1/*` endpoints curl-tested with a scoped temporary session
+  (created directly in Postgres, cleaned up after each round) — correct
+  JSON shapes, correct 401 when unauthenticated, old HTML routes (`/login`,
+  `/dashboard`, `/accounts`) confirmed unaffected throughout.
+- Full account CRUD (save → test → list → remove) exercised through the
+  Vite dev proxy end-to-end, matching Phase 1/2's verification style.
+- `tsc -b --noEmit` clean after every page added.
+- Production build (`npm run build`) succeeds; built `index.html` correctly
+  references `/app/assets/...`; `/app`, `/app/dashboard` (client route),
+  `/app/assets/*.js`, `/app/favicon.svg` all confirmed 200 from the real
+  FastAPI server, not just the dev proxy.
+
+### What's deliberately NOT done
+
+- **The old Jinja/HTMX UI at `/` was not retired.** This environment has no
+  browser/screenshot tooling — everything above proves the API contracts
+  and build pipeline are correct, but nothing has visually confirmed the
+  React app actually **renders** correctly (a client-side exception would
+  show a blank page to a real user while still returning HTTP 200 for
+  `index.html`, which curl cannot detect). Per the user's repeated "is this
+  stable" concern, retiring the one UI that's actually been visually used
+  before someone opens the new one in a real browser would be the wrong
+  risk trade. **Next step for the user: open `http://127.0.0.1:2909/app` and
+  click through it.** Once confirmed, retiring `workbench/templates/`,
+  `workbench/static/`, and the old HTML routes in `workbench/app.py` is a
+  small, low-risk deletion pass (§3f in the approved plan).
+- Bundle size warning: the SPA's JS bundle is 812KB (242KB gzipped) —
+  Vite's own build output flagged this. Not fixed — route-based code
+  splitting (`React.lazy`) is a reasonable follow-up, not urgent for an
+  internal analyst tool.
+- Attack-path candidates in the drawer are rendered as raw formatted JSON,
+  not a graph visualization — the old `/attack-paths` page's graph UI
+  (`static/js/attack-paths.js`) was the most bespoke piece of the legacy
+  frontend and wasn't ported 1:1; a proper node/edge visualization
+  (react-flow or similar) is a reasonable follow-up once the rest of the
+  consolidation is confirmed to be the right direction.
+- Known debt carried forward unchanged from Phases 1–2: the pytest suite
+  needs a real Postgres test-fixture strategy; `scripts/ui_watchdog.py` is
+  still broken.
+
+**Next**: user visually confirms `/app` in a browser → retire old UI (§3f
+finish) → optional follow-ups (code-splitting, attack-path graph
+visualization) → done, no further phases planned beyond what's in
+`~/Desktop/CSAO_TechStack_Proposal.md`.
+
+---
+
+## 2026-08-11 — Phase 2 complete: ARQ + Redis job queue, CLI/web dedup
+
+**Status: done, verified end-to-end. Assessments now run in a containerized
+ARQ worker instead of a thread in the web process.**
+
+What changed:
+- New `core/orchestrator.py`: the 14-stage engine-calling sequence that
+  used to exist twice (main.py's `CloudSecurityOrchestrator.run()` and
+  control_plane.py's `AssessmentRunner._run_assessment`) is now one function,
+  `run_pipeline(config, assessment_id, stage_hook=..., cancel_check=...,
+  validations=..., assessment_metadata=...)`. Verified line-by-line against
+  both original implementations, including a non-obvious detail both had in
+  common: a second, not-stage-marked `crown_jewel_engine.run(findings)` call
+  between the checklist_validation and threat_validation stages.
+- Fixed in passing: `"inventory"` was in `STAGES` but no code ever called
+  its stage-hook, so it sat at NOT_RUN forever. Now marked COMPLETED
+  alongside discovery (they share the same underlying data).
+- `main.py` keeps only CLI-specific code (banner, dependency check, Rich
+  console output) and calls `run_pipeline` once. `control_plane.py`'s
+  `AssessmentRunner._run_assessment` (renamed `_run_assessment_body`) keeps
+  only Postgres-state/audit/diagnostics code and also calls `run_pipeline`
+  once. Verified both actually hit the identical failure point
+  (`RuntimeError: AWS credential binding failed...`) when run without real
+  AWS credentials, proving they're genuinely sharing code now, not just
+  structurally similar.
+- `core/base_module.py`'s existing subprocess-level cancellation (collectors
+  poll `config["_cancel_check"]` to kill a running external tool mid-command)
+  is preserved — `run_pipeline` sets `config["_cancel_check"] = cancel_check`
+  internally. This was real pre-existing behavior discovered during the
+  extraction, not something added — flagging because it means cancellation
+  is actually finer-grained than "between stages only" for subprocess-based
+  collectors specifically (Prowler/Steampipe/Cloudsplaining), even though
+  the user's Phase 2 decision was "keep cooperative-flag-only, don't invest
+  further" — that decision was about not adding *new* interruption points,
+  and this pre-existing one required zero new code to keep.
+- `AssessmentRunner.start()`/`.cancel()` keep their exact pre-Phase-2
+  signatures. Internally, `start()` now does one `asyncio.run(self._enqueue(...))`
+  call (opens an ARQ Redis pool, enqueues `run_assessment_job`, closes the
+  pool) instead of spawning a `threading.Thread`. `workbench/runtime.py` and
+  `workbench/app.py`'s route handlers needed **zero changes**.
+- New `workbench/worker.py`: ARQ `WorkerSettings` + `run_assessment_job`,
+  which constructs its own `WorkbenchState`/`AssessmentRunner` (both plain
+  Postgres clients, safe to instantiate fresh per job) and runs the
+  synchronous pipeline via `run_in_executor`. `max_jobs=1` as defense in
+  depth alongside the existing Postgres-state RUNNING check.
+- New `Dockerfile` (python:3.12-slim + WeasyPrint's runtime libs + apt retry
+  loop — the Debian mirror was flaky twice during this build, hash mismatch
+  then failed index fetch, both transient) and `docker-compose.yml` gained
+  `redis` (redis:7-alpine) and `worker` (built from the new Dockerfile,
+  bind-mounts the repo so code edits don't need an image rebuild) services.
+  User chose the containerized-worker option over a manually-started venv
+  process.
+- `requirements.txt`: added `arq>=0.26.0`, `redis>=5.0.0`. Also changed
+  `cryptography>=43.0.1` to `cryptography==43.0.1` (exact pin) after the
+  Docker build hit the exact same "no prebuilt wheel, forces Rust source
+  build" problem Phase 1 hit locally — pinning exactly prevents this
+  recurring in any fresh install, container or not.
+- `/health` and the app's `lifespan` startup check both gained a Redis
+  ping alongside the existing Postgres check.
+
+Deviation from the written plan: none of substance — this phase executed
+close to as-planned. The one addition beyond the plan: the `_cancel_check`
+propagation into `core/base_module.py` (see above) wasn't explicitly called
+out in the approved plan but was necessary to avoid silently regressing
+existing subprocess-cancellation behavior; discovered by grepping for all
+consumers of `config["_cancel_check"]` before finalizing the extraction.
+
+Known debt, unchanged from Phase 1 (not re-litigated, still true): the
+pytest suite (`test_workbench_auth.py`, `test_workbench_control_plane.py`,
+`test_ui_health.py`) still needs a real Postgres test-fixture strategy.
+`scripts/ui_watchdog.py` is still broken (imports deleted `workbench/health.py`).
+
+Verification performed (live):
+- `docker compose ps`: postgres, adminer, redis, worker all up/healthy.
+- Restarted the native web app; `/health` returns
+  `{"status":"healthy","database":true,"redis":true,...}`.
+- Logged in via a scoped temp session, created a test cloud account, marked
+  it validated directly in Postgres (no real AWS credentials available in
+  this sandbox), started a test assessment via `POST /api/assessments`.
+- `docker compose logs worker` showed the job picked up in 0.67s and
+  completed in 3.80s total, calling `_run_assessment_body` →
+  `run_pipeline` → failing at `provider.authenticate()` exactly as expected
+  without real AWS creds.
+- Confirmed the failure (status=FAILED, full timeline, error message)
+  landed in the *same* `workbench_state` Postgres row the web UI reads —
+  proving the worker-writes/UI-reads contract holds across the process
+  boundary, not just in-process.
+- Ran `venv/bin/python main.py` standalone: hit the identical
+  `RuntimeError: AWS credential binding failed...` at the identical line
+  (`core/orchestrator.py:133`) as the web path — direct proof the CLI and
+  web are now running the same code, not just similar code.
+- Cleaned up all test artifacts (test account removed, temp session
+  cleared) after verification.
+
+Notable operational incident during this phase, worth remembering: after
+restarting the web app the first time post-rebuild, it failed to become
+reachable within `serve.py`'s 20-second startup window with no error
+output. Running `uvicorn` directly (bypassing `serve.py`'s watchdog)
+immediately afterward worked fine in ~2 seconds. Root cause: transient
+system load right after the Docker build completed, not a code issue — a
+plain retry via `serve.py` succeeded normally. If this recurs, try a direct
+`uvicorn workbench.app:app` run first to distinguish "app is broken" from
+"system was just slow that one time."
+
+**Next: Phase 3** — TypeScript/React frontend replacing Jinja2/HTMX, per
+the tech-stack proposal. Open items carried forward from that doc's §7:
+cookie vs. JWT auth for the new SPA, UI component library choice.
+
+---
+
+## 2026-08-07 — Phase 1 complete: real FastAPI + PostgreSQL
+
+**Status: done, verified end-to-end, live at http://127.0.0.1:2909.**
+
+What changed:
+- Deleted the vendored fake `fastapi/` package (a ~430-line hand-rolled ASGI
+  clone that was shadowing the real pip-installed FastAPI due to uvicorn
+  putting cwd first on `sys.path`) and the orphaned `uvicorn_compat.py`.
+- Added PostgreSQL via `docker-compose.yml` (`postgres:16-alpine` + `adminer`
+  on :8081), credentials in `.env` (gitignored).
+- New `workbench/db/` package: `base.py` (sync SQLAlchemy engine/session via
+  psycopg — sync was a deliberate choice, see below), `models.py` (`User`,
+  `SessionToken`, `LoginAudit`, `WorkbenchStateRow`).
+- Alembic set up (`alembic/`, sync engine, one autogenerated initial
+  migration — `alembic upgrade head` to apply).
+- `workbench/auth.py`: `LocalAuthManager` rewritten to use Postgres via
+  SQLAlchemy instead of sqlite3 — **same public method names/signatures**,
+  so no caller changes needed beyond the DB swap itself.
+- `workbench/control_plane.py`: `WorkbenchState` class rewritten to persist
+  to one singleton Postgres row (`workbench_state`, JSONB `data` column)
+  instead of `output/workbench/state.json` — **same `.load()`/`.save()`/
+  `.update(mutator)` contract**, so `AccountVault`, `AssessmentRunner`, and
+  `WorkbenchRuntime` needed zero changes.
+- `workbench/runtime.py`: fixed two spots that bypassed the `state_store`
+  contract and read/wrote `output/workbench/state.json` directly
+  (`_store_stage_state`, and one `execution_status` read in the reporting
+  path) — now both go through `state_store.update()`/`.load()` like
+  everywhere else.
+- `workbench/app.py`: full rewrite against real FastAPI. Fixed the two real
+  incompatibilities real Starlette/FastAPI have vs. the shim: (1)
+  `TemplateResponse` now takes `request` as a required first positional arg
+  (~40 call sites), (2) POST body fields now need explicit
+  `Annotated[str, Form()]` — real FastAPI does not auto-bind POST body to
+  bare `param: str = ""` the way the shim did (this would have silently
+  eaten every form submission as empty values if left unfixed). Also fixed
+  `request.path` → `request.url.path` (shim-only shortcut), removed the
+  `internal_health_auth` bypass (dead code once health.py was removed).
+- Deleted `workbench/health.py` + `workbench/stability.py` entirely (the
+  self-probing startup/watchdog system) — their internals called shim-only
+  APIs (`app._dispatch()`, `app.mounts`, `app.exception_callback`) that
+  don't exist on real FastAPI, so they were not portable, only replaceable.
+  Replaced with: a `lifespan` context manager doing one real `SELECT 1`
+  against Postgres at startup, a plain `GET /health` doing the same check
+  plus template/static existence checks, and a standard
+  `@app.exception_handler(Exception)` logging via loguru. Removed
+  `/health/ui`, `/runtime/status`, `/runtime-status` (pure self-probe
+  artifacts). Trimmed `workbench/serve.py`'s reachability poll to
+  `/health` + `/login` only.
+- One-time migration: `scripts/migrate_sqlite_auth_to_postgres.py` copied
+  the existing `shiva`/ADMINISTRATOR user + login_audit history from the
+  legacy `output/workbench/auth.db` into Postgres (password hash copied
+  as-is, no re-hash). Old `auth.db` left on disk untouched as a rollback
+  reference. Sessions were **not** migrated (30-min tokens, not worth
+  porting) — required one fresh login after cutover.
+
+Deliberate deviations from the original written plan, and why:
+1. **One JSONB `workbench_state` row instead of separate relational
+   `CloudAccount`/`Assessment`/`AssessmentStage` tables.** `AccountVault`'s
+   key-rotation + nested-metadata logic was intricate enough that fully
+   normalizing it would have meant rewriting business logic, not just
+   swapping storage — high risk for no immediate benefit since no real
+   accounts/assessments existed yet to query relationally. Real
+   normalization is a natural fit for Phase 2 anyway, once the job queue
+   changes the run-state shape.
+2. **`app.py` stayed one file**, not split into the originally-planned
+   8 router files (`routers/{auth,pages,assessments,accounts,settings,
+   users,api_misc,health}.py`). Same real-FastAPI outcome, less churn to
+   review in one pass. Splitting is still a reasonable low-risk follow-up.
+3. **Routes stayed plain sync `def`, not `async def` + `run_in_threadpool`
+   for Argon2.** Starlette already runs sync path-operation functions in a
+   thread pool automatically, so this gets the same non-blocking behavior
+   with less code change. No async engine (asyncpg) actually needed yet —
+   installed but unused; only the sync engine (psycopg) is wired up.
+
+Known debt NOT fixed in this pass (flagged, not hidden):
+- `tests/test_workbench_auth.py`, `tests/test_workbench_control_plane.py`,
+  `tests/test_ui_health.py` all assumed per-test SQLite/file isolation via
+  `tmp_path` — they will fail against shared Postgres now. Needs a real
+  test-DB fixture (separate schema or truncate-between-tests) before
+  they're trustworthy again.
+- `scripts/ui_watchdog.py` imports from the now-deleted `workbench/health.py`
+  — broken until rewritten or retired.
+
+Verification performed (live, not just import-level):
+- `curl /health` → real DB/template/static check, all PASS.
+- `curl /docs` → real FastAPI Swagger UI, HTTP 200.
+- Confirmed `import fastapi; fastapi.__file__` resolves to
+  `venv/lib/python3.12/site-packages/fastapi`, not the deleted shim.
+- Logged in via a scoped temporary session token, hit `/dashboard`,
+  `/accounts`, `/settings`, `/users` (correctly listed migrated `shiva`
+  user) — all 200 with expected content.
+- Submitted the account-save form (profile auth, fake creds) → confirmed
+  the Fernet-encrypted credential landed correctly inside
+  `workbench_state.data->'cloud_accounts'` in Postgres, then deleted it.
+- Server logs clean across all of the above, no tracebacks.
+
+Local dev environment notes: Python 3.12 installed via Homebrew (system
+default was 3.9, too old — `networkx>=3.3` requires 3.10+). `cryptography`
+pinned to `43.0.1` in `requirements.txt` floor to avoid a Rust-source-build
+version with no prebuilt wheel. Postgres via Docker Compose (not Supabase —
+no external account needed), Swagger UI for API testing (not Postman).
+
+**Next: Phase 2** — ARQ + Redis job queue to replace the `threading.Thread`-
+based `AssessmentRunner`, and extract one shared orchestrator module so
+`main.py` (CLI) and the worker call the same pipeline code instead of two
+independently-maintained implementations.

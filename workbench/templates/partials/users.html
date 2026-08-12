@@ -1,0 +1,119 @@
+{% import "_macros.html" as ui %}
+<div class="panel mb-3">
+  <div class="panel-header">
+    <div>
+      <h4 class="mb-1">User Management</h4>
+      <div class="text-secondary">Local user administration and login audit history.</div>
+    </div>
+  </div>
+  {% if error %}
+  <div class="alert alert-danger">{{ error }}</div>
+  {% endif %}
+  {% if message %}
+  <div class="alert alert-success">{{ message }}</div>
+  {% endif %}
+  {% if development_mode %}
+  <div class="alert alert-secondary">
+    Development mode is enabled. The bootstrap administrator is <strong>{{ development_user_username }}</strong>.
+    <form class="d-inline ms-2" method="post" action="/api/dev/reset-password">
+      <button class="btn btn-sm btn-outline-secondary" type="submit">Reset Development Password</button>
+    </form>
+  </div>
+  {% endif %}
+  <form hx-post="/api/users" hx-target="#workbench-content" hx-swap="innerHTML">
+    <div class="row g-3">
+      <div class="col-md-3">
+        <label class="form-label">Username</label>
+        <input class="form-control" type="text" name="username" required>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Display Name</label>
+        <input class="form-control" type="text" name="display_name" required>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Role</label>
+        {{ ui.render_select('role', runtime.user_role_options(), 'READ_ONLY', 'form-select') }}
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Initial Password</label>
+        <input class="form-control" type="password" name="password" required>
+      </div>
+      <div class="col-12">
+        <button class="btn btn-primary" type="submit">Create User</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<div class="panel table-responsive mb-3">
+  <div class="panel-header"><h4 class="mb-0">Users</h4></div>
+  <table class="table table-hover align-middle">
+    <thead>
+      <tr><th>Username</th><th>Name</th><th>Role</th><th>Status</th><th>Last Login</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+      {% for user in users %}
+      <tr>
+        <td>{{ user.username }}</td>
+        <td colspan="4">
+          <form class="row g-2 align-items-center" hx-post="/api/users/{{ user.id }}/update" hx-target="#workbench-content" hx-swap="innerHTML">
+            <div class="col-md-4"><input class="form-control form-control-sm" type="text" name="display_name" value="{{ user.display_name }}"></div>
+            <div class="col-md-3">
+              {{ ui.render_select('role', runtime.user_role_options(), user.role, 'form-select form-select-sm') }}
+            </div>
+            <div class="col-md-2">
+              {{ ui.render_select('account_status', runtime.user_status_options(), 'active' if user.is_active else 'disabled', 'form-select form-select-sm') }}
+            </div>
+            <div class="col-md-3 text-secondary small">
+              {{ user.last_login_at or 'Never' }}
+            </div>
+            <div class="col-md-4 mt-2">
+              <button class="btn btn-sm btn-outline-primary" type="submit">Save User</button>
+            </div>
+          </form>
+        </td>
+        <td class="text-nowrap">
+          <div class="mb-2">{{ 'Active' if user.is_active else 'Disabled' }}</div>
+          <form class="d-inline" hx-post="/api/users/{{ user.id }}/delete" hx-target="#workbench-content" hx-swap="innerHTML">
+            <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+      <tr>
+        <td></td>
+        <td colspan="5">
+          <form class="row g-2" hx-post="/api/users/{{ user.id }}/reset-password" hx-target="#workbench-content" hx-swap="innerHTML">
+            <div class="col-md-4"><input class="form-control form-control-sm" type="password" name="new_password" placeholder="Reset password"></div>
+            <div class="col-md-3"><button class="btn btn-sm btn-outline-secondary" type="submit">Reset Password</button></div>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="text-secondary">No users created.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="panel table-responsive">
+  <div class="panel-header"><h4 class="mb-0">Login Audit History</h4></div>
+  <table class="table table-hover align-middle">
+    <thead>
+      <tr><th>Time</th><th>User</th><th>Action</th><th>Success</th><th>Source</th><th>Detail</th></tr>
+    </thead>
+    <tbody>
+      {% for row in login_history %}
+      <tr>
+        <td>{{ row.created_at }}</td>
+        <td>{{ row.username or row.user_id }}</td>
+        <td>{{ row.action }}</td>
+        <td>{{ 'Yes' if row.success else 'No' }}</td>
+        <td>{{ row.remote_addr }}</td>
+        <td>{{ row.detail }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="text-secondary">No login history recorded.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

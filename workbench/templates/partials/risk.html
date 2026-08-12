@@ -1,0 +1,61 @@
+{% import "_macros.html" as ui %}
+{% include "partials/assessment_workspace_tabs.html" %}
+<div class="panel">
+  <div class="panel-header">
+    <h4>Risk Assessment</h4>
+    <div class="text-secondary">Sort the same risk records used by the existing risk engine.</div>
+  </div>
+  <div class="sort-links">
+    <a href="/risk?sort=highest_risk" hx-get="/risk?sort=highest_risk" hx-target="#workbench-content" hx-push-url="true">Highest Risk</a>
+    <a href="/risk?sort=highest_impact" hx-get="/risk?sort=highest_impact" hx-target="#workbench-content" hx-push-url="true">Highest Business Impact</a>
+    <a href="/risk?sort=highest_exposure" hx-get="/risk?sort=highest_exposure" hx-target="#workbench-content" hx-push-url="true">Highest Exposure</a>
+  </div>
+</div>
+
+<div class="panel table-responsive">
+  <table class="table table-hover align-middle">
+    <thead>
+      <tr>
+        <th>Finding</th>
+        <th>Risk Score</th>
+        <th>Business Impact</th>
+        <th>Likelihood</th>
+        <th>Why This Score</th>
+        <th>Exposure</th>
+        <th>Detection Coverage</th>
+        <th>Affected Crown Jewels</th>
+        <th>Attack Paths</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr class="clickable-row"
+          hx-get="/api/register/{{ row.finding_id }}"
+          hx-target="#detail-body"
+          hx-swap="innerHTML"
+          data-bs-toggle="offcanvas"
+          data-bs-target="#detailCanvas">
+        <td>{{ row.title }}<div class="small text-secondary">{{ row.service }}{% if row.resource %} | {{ row.resource }}{% endif %}</div></td>
+        <td><strong>{{ row.risk_score }}</strong></td>
+        <td>{{ row.business_impact }}</td>
+        <td>{{ ui.status_badge(row.likelihood) }}</td>
+        <td>
+          {% if row.risk_factors %}
+          <div class="small">
+            {% for factor, value in row.risk_factors.items() %}
+            <div>{{ factor.replace('_', ' ') | title }}: {{ value }}</div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <span class="text-secondary">No factor breakdown available.</span>
+          {% endif %}
+        </td>
+        <td>{{ row.exposure }}</td>
+        <td>{{ row.detection_coverage }}</td>
+        <td>{{ ui.list_tags(row.affected_crown_jewels) }}</td>
+        <td>{{ ui.list_tags(row.attack_paths) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

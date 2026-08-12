@@ -1,0 +1,417 @@
+###############################################################################
+# Cloud Security Assessment Orchestrator (CSAO)
+# Predefined MITRE ATT&CK Mapping Table
+#
+# Keyed by "<tool>:<check_id>". check_id is the stable identifier the
+# Normalization Engine extracts per tool:
+#   - steampipe      -> SQL file path relative to queries/, no extension
+#                        e.g. "aws/iam/wildcard_permissions"
+#   - prowler         -> Prowler CheckID (e.g. "s3_bucket_level_public_access_block")
+#   - cloudsplaining  -> Cloudsplaining finding_type
+#                        (e.g. "PrivilegeEscalation", "ResourceExposure")
+#   - access_analyzer -> "external_access" (single synthetic check_id, since
+#                         Access Analyzer findings are inherently "resource is
+#                         externally reachable")
+#   - config_aggregator -> Config rule name
+#
+# One check_id may map to MULTIPLE techniques - value is always a list.
+# This table replaces keyword-matching against filenames/free text; the
+# MITRE Mapping Engine only ever does a lookup, never a substring scan.
+#
+# Extend this file as new checklist items / tools are added rather than
+# adding heuristics in code.
+###############################################################################
+
+mappings:
+
+  # ---------------------------------------------------------------------
+  # Steampipe - IAM
+  # ---------------------------------------------------------------------
+
+  "steampipe:aws/iam/wildcard_permissions":
+    - tactic: "Privilege Escalation"
+      technique_id: "T1098"
+      technique: "Account Manipulation"
+
+  "steampipe:aws/iam/admin_users":
+    - tactic: "Privilege Escalation"
+      technique_id: "T1078"
+      technique: "Valid Accounts"
+
+  "steampipe:aws/iam/mfa_disabled_users":
+    - tactic: "Credential Access"
+      technique_id: "T1110"
+      technique: "Brute Force"
+
+  "steampipe:aws/iam/roles_without_mfa":
+    - tactic: "Credential Access"
+      technique_id: "T1110"
+      technique: "Brute Force"
+
+  "steampipe:aws/iam/weak_password_policy":
+    - tactic: "Credential Access"
+      technique_id: "T1110"
+      technique: "Brute Force"
+
+  "steampipe:aws/iam/access_keys_old":
+    - tactic: "Credential Access"
+      technique_id: "T1528"
+      technique: "Steal Application Access Token"
+
+  "steampipe:aws/iam/users_with_active_keys":
+    - tactic: "Credential Access"
+      technique_id: "T1528"
+      technique: "Steal Application Access Token"
+
+  "steampipe:aws/iam/users_no_activity":
+    - tactic: "Persistence"
+      technique_id: "T1078"
+      technique: "Valid Accounts"
+
+  "steampipe:aws/iam/inactive_users":
+    - tactic: "Persistence"
+      technique_id: "T1078"
+      technique: "Valid Accounts"
+
+  # ---------------------------------------------------------------------
+  # Steampipe - EC2
+  # ---------------------------------------------------------------------
+
+  "steampipe:aws/ec2/missing_imdsv2":
+    - tactic: "Credential Access"
+      technique_id: "T1552"
+      technique: "Unsecured Credentials"
+    - tactic: "Initial Access"
+      technique_id: "T1190"
+      technique: "Exploit Public-Facing Application"
+
+  "steampipe:aws/ec2/public_instances":
+    - tactic: "Initial Access"
+      technique_id: "T1190"
+      technique: "Exploit Public-Facing Application"
+
+  "steampipe:aws/ec2/open_security_groups":
+    - tactic: "Discovery"
+      technique_id: "T1046"
+      technique: "Network Service Discovery"
+    - tactic: "Initial Access"
+      technique_id: "T1190"
+      technique: "Exploit Public-Facing Application"
+
+  "steampipe:aws/ec2/unencrypted_volumes":
+    - tactic: "Collection"
+      technique_id: "T1530"
+      technique: "Data from Cloud Storage"
+
+  "steampipe:aws/ec2/monitoring_disabled":
+    - tactic: "Defense Evasion"
+      technique_id: "T1562"
+      technique: "Impair Defenses"
+
+  "steampipe:aws/ec2/termination_protection_disabled":
+    - tactic: "Impact"
+      technique_id: "T1485"
+      technique: "Data Destruction"
+
+  "steampipe:aws/ec2/old_instances":
+    - tactic: "Persistence"
+      technique_id: "T1584"
+      technique: "Compromise Infrastructure"
+
+  "steampipe:aws/ec2/stopped_instances":
+    - tactic: "Discovery"
+      technique_id: "T1526"
+      technique: "Cloud Service Discovery"
+
+  "steampipe:aws/ec2/unused_elastic_ips":
+    - tactic: "Discovery"
+      technique_id: "T1526"
+      technique: "Cloud Service Discovery"
+
+  # ---------------------------------------------------------------------
+  # Steampipe - S3
+  # ---------------------------------------------------------------------
+
+  "steampipe:aws/s3/bucket_public":
+    - tactic: "Collection"
+      technique_id: "T1530"
+      technique: "Data from Cloud Storage"
+    - tactic: "Initial Access"
+      technique_id: "T1190"
+      technique: "Exploit Public-Facing Application"
+
+  "steampipe:aws/s3/bucket_without_encryption":
+    - tactic: "Collection"
+      technique_id: "T1530"
+      technique: "Data from Cloud Storage"
+
+  "steampipe:aws/s3/bucket_logging_disabled":
+    - tactic: "Defense Evasion"
+      technique_id: "T1562"
+      technique: "Impair Defenses"
+
+  "steampipe:aws/s3/bucket_without_versioning":
+    - tactic: "Impact"
+      technique_id: "T1490"
+      technique: "Inhibit System Recovery"
+
+  "steampipe:aws/s3/bucket_without_mfa_delete":
+    - tactic: "Impact"
+      technique_id: "T1490"
+      technique: "Inhibit System Recovery"
+
+  "steampipe:aws/s3/bucket_without_object_lock":
+    - tactic: "Impact"
+      technique_id: "T1485"
+      technique: "Data Destruction"
+
+  # ---------------------------------------------------------------------
+  # Steampipe - VPC
+  # ---------------------------------------------------------------------
+
+  "steampipe:aws/vpc/ssh_open_world":
+    - tactic: "Initial Access"
+      technique_id: "T1190"
+      technique: "Exploit Public-Facing Application"
+
+  "steampipe:aws/vpc/rdp_open_world":
+    - tactic: "Initial Access"
+      technique_id: "T1190"
+      technique: "Exploit Public-Facing Application"
+
+  "steampipe:aws/vpc/unrestricted_ingress":
+    - tactic: "Discovery"
+      technique_id: "T1046"
+      technique: "Network Service Discovery"
+
+  "steampipe:aws/vpc/unrestricted_egress":
+    - tactic: "Exfiltration"
+      technique_id: "T1567"
+      technique: "Exfiltration Over Web Service"
+
+  "steampipe:aws/vpc/public_subnets":
+    - tactic: "Discovery"
+      technique_id: "T1016"
+      technique: "System Network Configuration Discovery"
+
+  "steampipe:aws/vpc/default_security_group":
+    - tactic: "Discovery"
+      technique_id: "T1046"
+      technique: "Network Service Discovery"
+
+  "steampipe:aws/vpc/flow_logs_disabled":
+    - tactic: "Defense Evasion"
+      technique_id: "T1562"
+      technique: "Impair Defenses"
+
+  # ---------------------------------------------------------------------
+  # Steampipe - RDS
+  # ---------------------------------------------------------------------
+
+  "steampipe:aws/rds/public_database":
+    - tactic: "Initial Access"
+      technique_id: "T1190"
+      technique: "Exploit Public-Facing Application"
+
+  "steampipe:aws/rds/public_snapshot":
+    - tactic: "Collection"
+      technique_id: "T1530"
+      technique: "Data from Cloud Storage"
+
+  "steampipe:aws/rds/unencrypted_database":
+    - tactic: "Collection"
+      technique_id: "T1530"
+      technique: "Data from Cloud Storage"
+
+  "steampipe:aws/rds/backup_disabled":
+    - tactic: "Impact"
+      technique_id: "T1490"
+      technique: "Inhibit System Recovery"
+
+  "steampipe:aws/rds/multi_az_disabled":
+    - tactic: "Impact"
+      technique_id: "T1490"
+      technique: "Inhibit System Recovery"
+
+  # ---------------------------------------------------------------------
+  # Steampipe - Lambda
+  # ---------------------------------------------------------------------
+
+  "steampipe:aws/lambda/public_lambda":
+    - tactic: "Execution"
+      technique_id: "T1648"
+      technique: "Serverless Execution"
+    - tactic: "Initial Access"
+      technique_id: "T1190"
+      technique: "Exploit Public-Facing Application"
+
+  "steampipe:aws/lambda/missing_vpc":
+    - tactic: "Exfiltration"
+      technique_id: "T1567"
+      technique: "Exfiltration Over Web Service"
+
+  "steampipe:aws/lambda/no_dlq":
+    - tactic: "Defense Evasion"
+      technique_id: "T1562"
+      technique: "Impair Defenses"
+
+  "steampipe:aws/lambda/old_runtime":
+    - tactic: "Initial Access"
+      technique_id: "T1190"
+      technique: "Exploit Public-Facing Application"
+
+  # ---------------------------------------------------------------------
+  # Steampipe - CloudTrail / Compliance / GuardDuty
+  # ---------------------------------------------------------------------
+
+  "steampipe:aws/cloudtrail/trail_status":
+    - tactic: "Defense Evasion"
+      technique_id: "T1562"
+      technique: "Impair Defenses"
+
+  "steampipe:aws/cloudtrail/multi_region_trail":
+    - tactic: "Defense Evasion"
+      technique_id: "T1562"
+      technique: "Impair Defenses"
+
+  "steampipe:aws/cloudtrail/log_validation":
+    - tactic: "Defense Evasion"
+      technique_id: "T1070"
+      technique: "Indicator Removal"
+
+  "steampipe:aws/cloudtrail/log_encryption":
+    - tactic: "Credential Access"
+      technique_id: "T1552"
+      technique: "Unsecured Credentials"
+
+  "steampipe:aws/compliance/cis_cloudtrail":
+    - tactic: "Defense Evasion"
+      technique_id: "T1562"
+      technique: "Impair Defenses"
+
+  "steampipe:aws/compliance/cis_config":
+    - tactic: "Defense Evasion"
+      technique_id: "T1562"
+      technique: "Impair Defenses"
+
+  "steampipe:aws/guardduty/detector_status":
+    - tactic: "Defense Evasion"
+      technique_id: "T1562"
+      technique: "Impair Defenses"
+
+  "steampipe:aws/guardduty/findings":
+    - tactic: "Defense Evasion"
+      technique_id: "T1562"
+      technique: "Impair Defenses"
+
+  "steampipe:aws/guardduty/disabled_keys":
+    - tactic: "Credential Access"
+      technique_id: "T1552"
+      technique: "Unsecured Credentials"
+
+  "steampipe:aws/guardduty/rotation_disabled":
+    - tactic: "Credential Access"
+      technique_id: "T1528"
+      technique: "Steal Application Access Token"
+
+  # ---------------------------------------------------------------------
+  # Prowler - common check-id families
+  # (Prowler CheckIDs are stable identifiers upstream; extend as the real
+  # checklist workbook specifies which Prowler checks are in scope.)
+  # ---------------------------------------------------------------------
+
+  "prowler:s3_bucket_level_public_access_block":
+    - tactic: "Collection"
+      technique_id: "T1530"
+      technique: "Data from Cloud Storage"
+
+  "prowler:s3_bucket_public_access":
+    - tactic: "Initial Access"
+      technique_id: "T1190"
+      technique: "Exploit Public-Facing Application"
+
+  "prowler:iam_user_mfa_enabled_console_access":
+    - tactic: "Credential Access"
+      technique_id: "T1110"
+      technique: "Brute Force"
+
+  "prowler:iam_policy_allows_privilege_escalation":
+    - tactic: "Privilege Escalation"
+      technique_id: "T1098"
+      technique: "Account Manipulation"
+
+  "prowler:iam_root_hardware_mfa_enabled":
+    - tactic: "Credential Access"
+      technique_id: "T1078"
+      technique: "Valid Accounts"
+
+  "prowler:ec2_instance_public_ip":
+    - tactic: "Initial Access"
+      technique_id: "T1190"
+      technique: "Exploit Public-Facing Application"
+
+  "prowler:ec2_instance_imdsv2_enabled":
+    - tactic: "Credential Access"
+      technique_id: "T1552"
+      technique: "Unsecured Credentials"
+
+  "prowler:ec2_securitygroup_allow_ingress_from_internet_to_any_port":
+    - tactic: "Discovery"
+      technique_id: "T1046"
+      technique: "Network Service Discovery"
+
+  "prowler:cloudtrail_multi_region_enabled":
+    - tactic: "Defense Evasion"
+      technique_id: "T1562"
+      technique: "Impair Defenses"
+
+  "prowler:guardduty_is_enabled":
+    - tactic: "Defense Evasion"
+      technique_id: "T1562"
+      technique: "Impair Defenses"
+
+  "prowler:rds_instance_no_public_access":
+    - tactic: "Initial Access"
+      technique_id: "T1190"
+      technique: "Exploit Public-Facing Application"
+
+  # ---------------------------------------------------------------------
+  # Cloudsplaining finding_type values
+  # ---------------------------------------------------------------------
+
+  "cloudsplaining:PrivilegeEscalation":
+    - tactic: "Privilege Escalation"
+      technique_id: "T1098"
+      technique: "Account Manipulation"
+
+  "cloudsplaining:ResourceExposure":
+    - tactic: "Collection"
+      technique_id: "T1530"
+      technique: "Data from Cloud Storage"
+
+  "cloudsplaining:DataExfiltration":
+    - tactic: "Exfiltration"
+      technique_id: "T1567"
+      technique: "Exfiltration Over Web Service"
+
+  "cloudsplaining:ServiceWildcard":
+    - tactic: "Privilege Escalation"
+      technique_id: "T1098"
+      technique: "Account Manipulation"
+
+  "cloudsplaining:CredentialsExposure":
+    - tactic: "Credential Access"
+      technique_id: "T1552"
+      technique: "Unsecured Credentials"
+
+  # ---------------------------------------------------------------------
+  # Access Analyzer (single synthetic check_id - external reachability)
+  # ---------------------------------------------------------------------
+
+  "access_analyzer:external_access":
+    - tactic: "Initial Access"
+      technique_id: "T1190"
+      technique: "Exploit Public-Facing Application"
+    - tactic: "Discovery"
+      technique_id: "T1526"
+      technique: "Cloud Service Discovery"

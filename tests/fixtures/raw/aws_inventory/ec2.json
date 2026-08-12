@@ -1,0 +1,13 @@
+[
+    {
+        "InstanceId": "i-12345",
+        "PublicIpAddress": "1.2.3.4",
+        "IamInstanceProfile": {
+            "Arn": "arn:aws:iam::111122223333:instance-profile/demo-role"
+        },
+        "SecurityGroups": [
+            {"GroupId": "sg-1", "GroupName": "demo-sg"}
+        ],
+        "VpcId": "vpc-1"
+    }
+]

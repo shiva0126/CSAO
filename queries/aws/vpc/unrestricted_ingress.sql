@@ -1,0 +1,11 @@
+select
+ group_id,
+ group_name,
+ ip_protocol,
+ from_port,
+ to_port,
+ cidr_ipv4
+from
+ aws_vpc_security_group_rule
+where
+ cidr_ipv4='0.0.0.0/0';

@@ -1,0 +1,6 @@
+[
+    {
+        "RoleName": "demo-role",
+        "Arn": "arn:aws:iam::111122223333:role/demo-role"
+    }
+]

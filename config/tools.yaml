@@ -1,0 +1,89 @@
+tools:
+
+  python3:
+    description: Python Interpreter
+    command: python3
+    version: "python3 --version"
+    required: true
+    installer:
+      type: apt
+      package: python3
+
+
+  pip3:
+    description: Python Package Manager
+    command: pip3
+    version: "pip3 --version"
+    required: true
+    installer:
+      type: apt
+      package: python3-pip
+
+
+  aws:
+    description: AWS CLI
+    command: aws
+    version: "aws --version"
+    required: true
+    installer:
+      type: awscli
+
+
+  git:
+    description: Git
+    command: git
+    version: "git --version"
+    required: true
+    installer:
+      type: apt
+      package: git
+
+
+  jq:
+    description: JSON Processor
+    command: jq
+    version: "jq --version"
+    required: true
+    installer:
+      type: apt
+      package: jq
+
+
+  prowler:
+    description: Prowler
+    command: prowler
+    version: "prowler --version"
+    required: true
+    installer:
+      type: pip
+      package: prowler
+
+
+  cloudsplaining:
+    description: Cloudsplaining
+    command: cloudsplaining
+    version: "cloudsplaining --version"
+    required: true
+    installer:
+      type: pip
+      package: cloudsplaining
+
+
+  steampipe:
+    description: Steampipe
+    command: steampipe
+    version: "steampipe --version"
+    required: true
+    installer:
+      type: script
+      url: https://steampipe.io/install/steampipe.sh
+
+
+  cartography:
+    description: Cartography
+    command: cartography
+    version: "cartography --version"
+    required: true
+    installer:
+      type: pip
+      package: cartography

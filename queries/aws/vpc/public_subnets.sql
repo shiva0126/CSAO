@@ -1,0 +1,9 @@
+select
+ subnet_id,
+ cidr_block,
+ availability_zone,
+ map_public_ip_on_launch
+from
+ aws_vpc_subnet
+where
+ map_public_ip_on_launch=true;

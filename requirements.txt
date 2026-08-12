@@ -1,0 +1,73 @@
+###############################################################################
+# CSAO runtime dependencies
+#
+# Target interpreter: Python 3.12
+# Install with: python3 -m pip install -r requirements.txt
+###############################################################################
+
+# AWS SDK
+boto3>=1.35.0
+botocore>=1.35.0
+
+# YAML / templating / local web UI
+PyYAML>=6.0.2
+Jinja2>=3.1.4
+MarkupSafe>=2.1.5
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
+
+# Database
+sqlalchemy>=2.0.51
+asyncpg>=0.30.0
+psycopg[binary]>=3.2.0
+alembic>=1.14.0
+
+# Job queue
+arq>=0.26.0
+redis>=5.0.0
+
+# Security and encrypted account vault
+cryptography==43.0.1
+cffi>=1.17.1
+argon2-cffi>=25.1.0
+
+# Core runtime helpers
+rich>=13.8.0
+loguru>=0.7.2
+networkx>=3.3
+python-dateutil>=2.9.0
+
+# Reporting
+WeasyPrint>=62.3
+reportlab>=4.2.2
+markdown>=3.7
+
+# Data handling used by the current codebase and tooling checks
+pandas>=2.2.2
+numpy>=2.1.0
+requests>=2.32.3
+plotly>=5.24.0
+jsonschema>=4.23.0
+beautifulsoup4>=4.12.3
+lxml>=5.3.0
+csvkit>=2.0.1
+xmltodict>=0.13.0
+pydantic>=2.9.2
+click>=8.1.7
+tenacity>=9.0.0
+alive-progress>=3.1.5
+psutil>=6.0.0
+python-dotenv>=1.0.1
+py7zr>=0.22.0
+openpyxl>=3.1.5
+XlsxWriter>=3.2.0
+colorama>=0.4.6
+tabulate>=0.9.0
+tqdm>=4.66.5
+matplotlib>=3.9.2
+
+# Optional cloud SDKs kept declared for existing roadmap compatibility
+azure-identity>=1.18.0
+azure-mgmt-resource>=23.1.1
+google-cloud-storage>=2.18.2

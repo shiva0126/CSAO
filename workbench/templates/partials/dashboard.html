@@ -1,0 +1,264 @@
+{% import "_macros.html" as ui %}
+{% set regions = dashboard.regions or [] %}
+{% set quick_actions = dashboard.quick_actions or [] %}
+{% set monitor = dashboard.monitor or {} %}
+{% set checklist_progress = dashboard.checklist_progress or {} %}
+{% set risk_summary = dashboard.risk_summary or {} %}
+{% set validation_summary = dashboard.validation_summary or {} %}
+{% set assessment_health_score = dashboard.assessment_health_score or {} %}
+{% set collector_health = dashboard.collector_health or [] %}
+{% set evidence_coverage = dashboard.evidence_coverage or [] %}
+{% set platform_health = dashboard.platform_health or {} %}
+{% set safety_validation = dashboard.safety_validation or {} %}
+{% set recent_assessments = dashboard.recent_assessments or [] %}
+{% set recent_reports = dashboard.recent_reports or [] %}
+{% set timeline = dashboard.timeline or [] %}
+{% set methodology_progress = runtime.methodology_progress() %}
+<div class="dashboard-grid">
+  <div class="hero-card">
+    <div class="hero-copy">
+      <div class="text-uppercase small text-secondary">Executive Dashboard</div>
+      <h3>{{ dashboard.assessment_name }}</h3>
+      <div class="text-secondary">{{ dashboard.cloud_provider }} | {{ dashboard.assessment_status }} | {{ dashboard.current_lifecycle_stage }}</div>
+    </div>
+    <div class="hero-meta">
+      <div>{{ dashboard.number_of_accounts }} account(s)</div>
+      <div>{{ regions | join(', ') if regions else 'No regions configured' }}</div>
+      <div>{{ dashboard.assessment_health }}</div>
+    </div>
+  </div>
+
+  <div class="dashboard-command-strip">
+    <div class="command-strip-card">
+      <div class="metric-label">Health Signal</div>
+      <div class="command-strip-value">{{ dashboard.assessment_health }}</div>
+      <div class="metric-sub">Overall assessment confidence and execution quality.</div>
+    </div>
+    <div class="command-strip-card">
+      <div class="metric-label">Lifecycle Stage</div>
+      <div class="command-strip-value">{{ dashboard.current_lifecycle_stage }}</div>
+      <div class="metric-sub">{{ dashboard.assessment_status }}</div>
+    </div>
+    <div class="command-strip-card">
+      <div class="metric-label">Region Footprint</div>
+      <div class="command-strip-value">{{ regions | length }}</div>
+      <div class="metric-sub">{{ regions | join(', ') if regions else 'No regions configured' }}</div>
+    </div>
+  </div>
+
+  <div class="quick-actions-grid">
+    {% for action in quick_actions %}
+      {{ ui.quick_action(action) }}
+    {% endfor %}
+  </div>
+
+  <div class="metric-grid">
+    {{ ui.metric_card("Assessment Progress", (monitor.progress or 0) ~ '%') }}
+    {{ ui.metric_card("Total Resources", dashboard.total_resources) }}
+    {{ ui.metric_card("Evidence Sources", dashboard.evidence_sources) }}
+    {{ ui.metric_card("Findings", dashboard.findings) }}
+    {{ ui.metric_card("Checklist Coverage", (checklist_progress.PASS or 0) ~ ' pass / ' ~ (checklist_progress.FAIL or 0) ~ ' fail') }}
+    {{ ui.metric_card("Threat Scenarios", dashboard.threat_scenarios) }}
+    {{ ui.metric_card("Attack Paths", dashboard.attack_paths) }}
+    {{ ui.metric_card("Risk Distribution", (risk_summary.critical or 0) ~ ' critical') }}
+    {{ ui.metric_card("Manual Reviews Pending", dashboard.manual_reviews_remaining) }}
+    {{ ui.metric_card("Validation Queue", validation_summary.NEEDS_REVIEW or 0) }}
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h4>Methodology Progress</h4>
+      <div class="text-secondary">Use the assessment lifecycle to see what is complete, active, or still waiting for analyst action.</div>
+    </div>
+    <div class="tag-list">
+      {% for step in methodology_progress %}
+      <a class="tag text-decoration-none" href="{{ step.href }}" hx-get="{{ step.href }}" hx-target="#workbench-content" hx-push-url="true">{{ step.label }}: {{ step.status.replace('_', ' ') }}</a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h4>Pending Analyst Actions</h4>
+      <div class="text-secondary">Items that typically require consultant review before the assessment can be closed.</div>
+    </div>
+    <div class="activity-list">
+      <div class="activity-item d-flex justify-content-between align-items-center">
+        <div class="activity-name">Checklist controls awaiting manual review</div>
+        <div>{{ checklist_progress.MANUAL_REVIEW or 0 }}</div>
+      </div>
+      <div class="activity-item d-flex justify-content-between align-items-center">
+        <div class="activity-name">Findings awaiting validation</div>
+        <div>{{ validation_summary.NEEDS_REVIEW or 0 }}</div>
+      </div>
+      <div class="activity-item d-flex justify-content-between align-items-center">
+        <div class="activity-name">Collector failures requiring follow-up</div>
+        <div>{{ monitor.failures | length if monitor.failures else 0 }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h4>Assessment Health</h4>
+      <div class="text-secondary">Confidence and coverage factors derived from cached assessment diagnostics.</div>
+    </div>
+    <div class="metric-grid">
+      {{ ui.metric_card("Configuration", (assessment_health_score.configuration or 0) ~ '%') }}
+      {{ ui.metric_card("Permissions", (assessment_health_score.permissions or 0) ~ '%') }}
+      {{ ui.metric_card("Evidence Coverage", (assessment_health_score.evidence_coverage or 0) ~ '%') }}
+      {{ ui.metric_card("Collector Success", (assessment_health_score.collector_success or 0) ~ '%') }}
+      {{ ui.metric_card("Cloud Coverage", (assessment_health_score.cloud_coverage or 0) ~ '%') }}
+      {{ ui.metric_card("Assessment Confidence", (assessment_health_score.assessment_confidence or 0) ~ '%') }}
+    </div>
+    {% if assessment_health_score.deductions %}
+    <div class="form-help mt-3">
+      Reasons for deductions: {{ assessment_health_score.deductions | join(' ') }}
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h4>Assessment Run</h4>
+      <div class="text-secondary">Real-time view of the current assessment stage and execution status.</div>
+    </div>
+    <div class="settings-grid">
+      <div><strong>Current Stage</strong><div>{{ monitor.current_stage or 'Idle' }}</div></div>
+      <div><strong>Current Collector</strong><div>{{ monitor.current_collector or 'N/A' }}</div></div>
+      <div><strong>Current AWS API</strong><div>{{ monitor.current_api or 'N/A' }}</div></div>
+      <div><strong>Resources Processed</strong><div>{{ monitor.resources_processed or 0 }}</div></div>
+      <div><strong>Elapsed</strong><div>{{ monitor.elapsed_time or '0s' }}</div></div>
+      <div><strong>Estimated Remaining</strong><div>{{ monitor.estimated_remaining_time or 'N/A' }}</div></div>
+      <div><strong>Failures</strong><div>{{ monitor.failures | length if monitor.failures else 0 }}</div></div>
+      <div><strong>Status Message</strong><div>{{ monitor.status_message or 'Idle' }}</div></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h4>Checklist Progress</h4>
+      <div class="text-secondary">Workbook control status across pass, fail, manual review, and not evaluated.</div>
+    </div>
+    <div class="chart-shell">
+      <canvas id="checklistChart"
+              data-chart="doughnut"
+              data-labels='["PASS","FAIL","MANUAL","NOT EVALUATED"]'
+              data-values='[{{ checklist_progress.PASS or 0 }},{{ checklist_progress.FAIL or 0 }},{{ checklist_progress.MANUAL_REVIEW or 0 }},{{ checklist_progress.NOT_EVALUATED or 0 }}]'></canvas>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h4>Risk Snapshot</h4>
+      <div class="text-secondary">Current risk distribution across scored findings.</div>
+    </div>
+    <div class="chart-shell">
+      <canvas id="riskChart"
+              data-chart="bar"
+              data-labels='["Critical","High","Medium","Low","Info"]'
+              data-values='[{{ risk_summary.critical or 0 }},{{ risk_summary.high or 0 }},{{ risk_summary.medium or 0 }},{{ risk_summary.low or 0 }},{{ risk_summary.info or 0 }}]'></canvas>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h4>Collector Health</h4>
+      <div class="text-secondary">Enabled state for evidence and inventory collectors.</div>
+    </div>
+    <div class="activity-list">
+      {% for collector in collector_health %}
+      <div class="activity-item d-flex justify-content-between align-items-center">
+        <div class="activity-name">{{ collector.name }}</div>
+        <div>{{ ui.status_badge(collector.status) }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h4>Evidence Coverage</h4>
+      <div class="text-secondary">Explains where capability gaps may reduce evidence depth or finding coverage.</div>
+    </div>
+    <div class="activity-list">
+      {% for item in evidence_coverage %}
+      <div class="activity-item d-flex justify-content-between align-items-center">
+        <div>
+          <div class="activity-name">{{ item.service }}</div>
+          <div class="small text-secondary">{{ item.status }}</div>
+        </div>
+        <div>{{ ui.status_badge(item.coverage) }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h4>Overall Platform Health</h4>
+      <div class="text-secondary">Provider, accounts, collectors, and report readiness.</div>
+    </div>
+    <div class="settings-grid">
+      <div><strong>Provider Auth</strong><div>{{ 'Available' if platform_health.provider_available else 'Unavailable' }}</div></div>
+      <div><strong>Validated Accounts</strong><div>{{ platform_health.accounts_validated or 0 }}</div></div>
+      <div><strong>Enabled Collectors</strong><div>{{ platform_health.collector_count or 0 }}</div></div>
+      <div><strong>Recent Reports</strong><div>{{ platform_health.report_count or 0 }}</div></div>
+      <div><strong>Safety Validation</strong><div>{{ safety_validation.status or 'Unknown' }}</div></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h4>Recently Completed Assessments</h4>
+    </div>
+    <div class="activity-list">
+      {% for item in recent_assessments %}
+      <div class="activity-item">
+        <div class="activity-name">{{ item.name }}</div>
+        <div class="text-secondary small">{{ item.status }} | {{ item.completed or item.started }}</div>
+      </div>
+      {% else %}
+      <div class="text-secondary">No assessments recorded yet.</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h4>Recent Reports</h4>
+    </div>
+    <div class="activity-list">
+      {% for item in recent_reports %}
+      <div class="activity-item">
+        <div class="activity-name">{{ item.title }}</div>
+        <div class="text-secondary small">{{ item.generated_at }} | {{ item.size }} bytes</div>
+      </div>
+      {% else %}
+      <div class="text-secondary">No reports generated yet.</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h4>Assessment Timeline</h4>
+      <div class="text-secondary">Permanent execution history retained from the most recent assessment run.</div>
+    </div>
+    <div class="activity-list">
+      {% for item in timeline %}
+      <div class="activity-item">
+        <div class="activity-name">{{ item.message }}</div>
+        <div class="text-secondary small">{{ item.timestamp }}{% if item.status %} | {{ item.status }}{% endif %}</div>
+      </div>
+      {% else %}
+      <div class="text-secondary">No assessment timeline is available yet.</div>
+      {% endfor %}
+    </div>
+    {% if dashboard.diagnostics_bundle %}
+    <div class="mt-3">
+      <a class="btn btn-sm btn-outline-secondary" href="/diagnostics/download?path={{ dashboard.diagnostics_bundle }}">Download Diagnostics Bundle</a>
+    </div>
+    {% endif %}
+  </div>
+</div>

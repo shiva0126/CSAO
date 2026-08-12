@@ -1,0 +1,9 @@
+select
+ instance_id,
+ instance_state,
+ instance_type,
+ region
+from
+ aws_ec2_instance
+where
+ instance_state='stopped';

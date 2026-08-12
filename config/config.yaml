@@ -1,0 +1,337 @@
+###############################################################################
+# Cloud Security Assessment Framework (CSAF)
+# Configuration File
+###############################################################################
+
+framework:
+  name: Cloud Security Assessment Orchestrator
+  version: 2.0.0
+  author: D Praveen
+
+###############################################################################
+# Cloud Platform
+#
+# Selects the CloudProvider implementation (core/providers/registry.py).
+# AWS is the only implemented platform today; gcp/azure are registered but
+# raise NotImplementedError until built - the orchestration code does not
+# need to change when they are added.
+###############################################################################
+
+platform: aws
+
+###############################################################################
+# AWS Configuration
+###############################################################################
+
+aws:
+
+  profile: default
+
+  regions:
+    - us-east-1
+    - us-east-2
+    - us-west-1
+    - us-west-2
+    - eu-west-1
+    - eu-central-1
+    - ap-south-1
+    - ap-southeast-1
+    - ap-southeast-2
+
+  auto_discover_regions: true
+
+  scan_all_accounts: false
+
+  account_ids: []
+
+###############################################################################
+# Assessment Modules
+#
+# aws_inventory is consumed by the Environment Discovery Engine (Asset
+# Inventory step); every other flag here is an Evidence Collection Engine
+# provider (see core/engines/evidence_engine.py EVIDENCE_PROVIDERS).
+###############################################################################
+
+modules:
+
+  aws_inventory: true
+
+  prowler: true
+
+  cloudsplaining: true
+
+  steampipe: true
+
+  access_analyzer: true
+
+  config_aggregator: true
+
+  cartography: true      # requires a reachable Neo4j instance - see cartography: below (docker-compose.yml runs one)
+
+  tenable: false          # optional - requires TENABLE_ACCESS_KEY / TENABLE_SECRET_KEY
+
+###############################################################################
+# Execution
+###############################################################################
+
+execution:
+
+  parallel_execution: true
+
+  max_threads: 6
+
+  timeout: 3600
+
+  retry_count: 3
+
+###############################################################################
+# Output
+###############################################################################
+
+output:
+
+  root_directory: output
+
+  raw_directory: output/raw
+
+  discovery_directory: output/discovery
+
+  normalized_directory: output/normalized
+
+  checklist_directory: output/checklist
+
+  mitre_directory: output/mitre
+
+  crown_jewel_directory: output/crown_jewel
+
+  assessment_register_directory: output/assessment_register
+
+  threat_directory: output/threats
+
+  attack_path_directory: output/attack_paths
+
+  risk_directory: output/risk
+
+  reports_directory: output/reports
+
+###############################################################################
+# Report Generation
+###############################################################################
+
+reports:
+
+  generate_html: true
+
+  generate_pdf: true
+
+  generate_json: true
+
+  generate_csv: true
+
+  executive_dashboard: true
+
+###############################################################################
+# Logging
+###############################################################################
+
+logging:
+
+  level: INFO
+
+  log_directory: logs
+
+  log_file: framework.log
+
+###############################################################################
+# Correlation Engine
+###############################################################################
+
+correlation:
+
+  remove_duplicates: true
+
+  correlate_findings: true
+
+  normalize_data: true
+
+###############################################################################
+# Checklist Validation
+#
+# The checklist - not tool output - drives the assessment. Point this at
+# the real assessment checklist once checklists/import_workbook.py has
+# converted it; checklist.example.yaml is a placeholder.
+###############################################################################
+
+checklist:
+
+  # Real 177-item enterprise checklist imported from the manager's STRIDE
+  # workbooks via checklists/import_stride_workbooks.py. See
+  # checklists/README.md for coverage notes (17 of 177 items currently have
+  # automated tool bindings - the rest are outside this framework's AWS-only
+  # automation scope or need analyst judgment).
+  file: checklists/checklist.yaml
+
+knowledge_catalog:
+
+  file: data/assessment_knowledge_catalog.yaml
+
+###############################################################################
+# Crown Jewel Inventory
+#
+# Manually maintained business-context inventory - never auto-discovered.
+# Point this at the real Crown Jewel inventory once available;
+# crown_jewels.example.yaml is a placeholder.
+###############################################################################
+
+crown_jewels:
+
+  file: crown_jewels/crown_jewels.example.yaml
+
+###############################################################################
+# Attack Path Engine
+###############################################################################
+
+attack_path:
+
+  max_hops: 5
+
+  # Named kill chains (AP-01..AP-15) imported from the manager's Attack
+  # Path Linkage workbook sheet - reference catalog shown in the Attack
+  # Path Summary report alongside this engine's own graph-discovered
+  # candidates. See core/reporting/reporting_engine.py.
+  catalog: data/attack_path_catalog.yaml
+
+###############################################################################
+# Risk Scoring
+###############################################################################
+
+risk_scoring:
+
+  enabled: true
+
+  # Per-tool weights - retained as an input signal for tool-source-derived
+  # factors (e.g. Identity Privilege leans on Cloudsplaining) rather than
+  # driving the score directly.
+  weights:
+
+    prowler: 40
+
+    cloudsplaining: 25
+
+    access_analyzer: 15
+
+    steampipe: 10
+
+    aws_inventory: 5
+
+    cartography: 5
+
+  # Risk Prioritization Engine composite factors (core/engines/risk_engine.py)
+  # - each factor is scored 0-100 independently, then combined using these
+  # relative weights.
+  factors:
+
+    exposure: 1
+
+    identity_privilege: 1
+
+    trust_relationships: 1
+
+    crown_jewel_proximity: 1
+
+    detection_coverage: 1
+
+    blast_radius: 1
+
+###############################################################################
+# Severity Thresholds
+###############################################################################
+
+severity:
+
+  critical: 90
+
+  high: 70
+
+  medium: 40
+
+  low: 10
+
+###############################################################################
+# Compliance Mapping
+###############################################################################
+
+compliance:
+
+  cis: true
+
+  pci_dss: true
+
+  nist: true
+
+  iso27001: true
+
+###############################################################################
+# MITRE ATT&CK Mapping
+###############################################################################
+
+mitre:
+
+  enabled: true
+
+  dataset: data/enterprise-attack.json
+
+###############################################################################
+# Notifications (Future)
+###############################################################################
+
+notifications:
+
+  email: false
+
+  slack: false
+
+###############################################################################
+# Dashboard
+###############################################################################
+
+dashboard:
+
+  host: 0.0.0.0
+
+  port: 5000
+
+###############################################################################
+# Output File Names
+###############################################################################
+
+filenames:
+
+  inventory: inventory.json
+
+  normalized: normalized_findings.json
+
+  correlated: correlated_findings.json
+
+  executive_html: Executive_Report.html
+
+  executive_pdf: Executive_Report.pdf
+
+  executive_csv: Executive_Report.csv
+
+  executive_json: Executive_Report.json
+#################################################################################
+# cartography
+
+#################################################################################
+
+cartography:
+
+  # Docker service hostname -- this config is read inside the worker
+  # container, which shares a network with the neo4j service defined in
+  # docker-compose.yml, not this host's localhost.
+  neo4j_uri: bolt://neo4j:7687
+
+  username: neo4j
+
+  password: password

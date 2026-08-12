@@ -1,0 +1,49 @@
+###############################################################################
+# Cloud Security Assessment Orchestrator (CSAO)
+# Crown Jewel Inventory - EXAMPLE / PLACEHOLDER
+#
+# Manually maintained by the assessment team / client stakeholders - this is
+# NOT auto-discovered. Replace with the real inventory and point
+# config/config.yaml -> crown_jewels.file at it.
+#
+# Matching (see core/engines/crown_jewel_engine.py):
+#   1. Exact match on resource_id (ARN or provider-native id)
+#   2. Exact match on resource_name
+#   3. Glob pattern match against resource_id/resource_name (fnmatch)
+# First match wins; entries are evaluated in file order.
+#
+# criticality: CRITICAL | HIGH | MEDIUM  - feeds Crown Jewel Proximity in the
+# Risk Prioritization Engine.
+###############################################################################
+
+crown_jewels:
+
+  - name: "Customer Financial Records - Production S3"
+    match:
+      resource_id: "arn:aws:s3:::acme-prod-financial-records"
+      resource_name: "acme-prod-financial-records"
+      pattern: "*financial-records*"
+    business_unit: "Finance"
+    environment: "Prod"
+    criticality: "CRITICAL"
+    description: "Primary store for customer billing and financial transaction data."
+
+  - name: "Primary Customer Database"
+    match:
+      resource_id: null
+      resource_name: null
+      pattern: "*prod-customer-db*"
+    business_unit: "Engineering"
+    environment: "Prod"
+    criticality: "CRITICAL"
+    description: "RDS instance holding the production customer PII dataset."
+
+  - name: "Corporate IAM Admin Role"
+    match:
+      resource_id: null
+      resource_name: null
+      pattern: "*OrganizationAccountAccessRole*"
+    business_unit: "IT"
+    environment: "Prod"
+    criticality: "HIGH"
+    description: "Cross-account administrative role - compromise here has org-wide blast radius."

@@ -1,0 +1,519 @@
+{% import "_macros.html" as ui %}
+{% set access_model = access_model if access_model is defined else data %}
+{% set trust_settings = access_model.trust_settings or {} %}
+<div class="onboarding-shell" data-access-requirements>
+  <aside class="onboarding-nav">
+    <div class="metric-label">On This Page</div>
+    <a href="#summary">Executive Summary</a>
+    <a href="#quickstart">Quick Start</a>
+    <a href="#auth">Authentication</a>
+    <a href="#iam-role">Generate IAM Role</a>
+    <a href="#permissions">Permission Summary</a>
+    <a href="#readiness">Assessment Readiness</a>
+    <a href="#impact">Service Impact Matrix</a>
+    <a href="#collectors">Collector Overview</a>
+    <a href="#matrix">IAM Permission Matrix</a>
+    <a href="#trust">Security Transparency</a>
+    <a href="#faq">FAQ</a>
+    <a href="#reference">Technical Reference</a>
+  </aside>
+
+  <div class="onboarding-content">
+    <section id="summary" class="panel mb-3 onboarding-hero">
+      <div class="panel-header">
+        <div>
+          <div class="brand-kicker">Enterprise Onboarding</div>
+          <h4 class="mb-1">{{ overview.title }}</h4>
+          <div class="text-secondary">A guided read-only onboarding experience for enterprise cloud administrators, security architects, auditors, and analysts.</div>
+        </div>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="/accounts">Getting Started</a>
+          <a class="btn btn-outline-secondary" href="/access-requirements/guide.md">Export Guide</a>
+        </div>
+      </div>
+      <div class="row g-3">
+        <div class="col-xl-8">
+          <div class="summary-card h-100">
+            <div class="metric-label">Executive Summary</div>
+            <ul class="access-list mb-3">
+              {% for statement in overview.statements %}
+              <li>{{ statement }}</li>
+              {% endfor %}
+            </ul>
+            <div class="executive-grid">
+              <div class="summary-card">
+                <div class="metric-label">Average Setup Time</div>
+                <div class="metric-value">{{ executive_summary.average_setup_time }}</div>
+              </div>
+              <div class="summary-card">
+                <div class="metric-label">Supported Authentication</div>
+                <div class="metric-sub mt-2">{{ authentication_methods | join(', ') }}</div>
+              </div>
+              <div class="summary-card">
+                <div class="metric-label">Supported Cloud Providers</div>
+                <div class="metric-sub mt-2">{{ executive_summary.supported_clouds | join(', ') }}</div>
+              </div>
+              <div class="summary-card">
+                <div class="metric-label">Assessment Workflow</div>
+                <div class="metric-sub mt-2">{{ executive_summary.workflow | join(' -> ') }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-xl-4">
+          <div class="summary-card h-100">
+            <div class="metric-label">Read-Only Assurance</div>
+            <div class="metric-sub mt-2">STS `AssumeRole` is used only to obtain temporary credentials. No customer resources are modified during onboarding or assessment execution.</div>
+            <div class="trust-pill-stack mt-3">
+              <span class="meta-pill">Read / List / Describe / Get Only</span>
+              <span class="meta-pill">Temporary Credentials</span>
+              <span class="meta-pill">Enterprise Least Privilege</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="quickstart" class="panel mb-3">
+      <div class="panel-header">
+        <div>
+          <h4 class="mb-1">Quick Start Guide</h4>
+          <div class="text-secondary">Designed so first-time users can complete setup in 5-10 minutes without reading the full reference first.</div>
+        </div>
+      </div>
+      <div class="quickstart-flow">
+        {% for step in quick_start_steps %}
+        <div class="quickstart-step">
+          <div class="quickstart-index">{{ loop.index }}</div>
+          <div class="quickstart-copy">
+            <h5>{{ step.title }}</h5>
+            <div class="text-secondary">{{ step.description }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section id="auth" class="panel mb-3">
+      <div class="panel-header">
+        <div>
+          <h4 class="mb-1">Authentication Methods</h4>
+          <div class="text-secondary">Choose the onboarding model that best fits your environment and risk posture.</div>
+        </div>
+      </div>
+      <div class="auth-method-grid">
+        {% for card in authentication_cards %}
+        <article class="auth-method-card {% if card.recommended %}recommended{% endif %} selected">
+          <div class="auth-method-title">{{ card.name }}</div>
+          <div class="auth-method-badge">{{ 'Recommended' if card.recommended else card.enterprise_suitability ~ ' Suitability' }}</div>
+          <div class="metric-sub">{{ card.use_case }}</div>
+          <div class="small"><strong>Security recommendation:</strong> {{ card.security_recommendation }}</div>
+          <div class="small"><strong>Required fields:</strong> {{ card.required_fields | join(', ') }}</div>
+          <div class="small"><strong>Enterprise suitability:</strong> {{ card.enterprise_suitability }}</div>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section id="iam-role" class="panel mb-3">
+      <div class="panel-header">
+        <div>
+          <h4 class="mb-1">Generate IAM Role</h4>
+          <div class="text-secondary">Use the generated policy and trust relationship as the enterprise onboarding baseline. Manual changes should be reviewed by a cloud security architect.</div>
+        </div>
+      </div>
+      <div class="alert alert-warning py-2">If you manually modify these policies, review the resulting permission scope before validating the account in CSAO.</div>
+      <form class="summary-card mb-3" method="get" action="/access-requirements">
+        <div class="metric-label">Trust Policy Settings</div>
+        <div class="row g-3 mt-1">
+          <div class="col-lg-4">
+            <label class="form-label">CSAO Account ID</label>
+            <input class="form-control" type="text" name="trust_account_id" value="{{ trust_settings.assessment_account_id or '' }}" placeholder="123456789012">
+          </div>
+          <div class="col-lg-4">
+            <label class="form-label">Assessment Role Name</label>
+            <input class="form-control" type="text" name="assessment_role_name" value="{{ trust_settings.assessment_role_name or 'CSAO-Assessor' }}" placeholder="CSAO-Assessor">
+          </div>
+          <div class="col-lg-4">
+            <label class="form-label">Optional ExternalId</label>
+            <input class="form-control" type="text" name="external_id" value="{{ trust_settings.external_id or '' }}" placeholder="Auto-generate when enabled">
+          </div>
+          <div class="col-lg-6">
+            <div class="form-check mt-2">
+              <input class="form-check-input" type="checkbox" name="use_root_trust" value="true" {% if trust_settings.use_root_trust %}checked{% endif %}>
+              <label class="form-check-label">Allow account root trust for backward compatibility</label>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <div class="form-check mt-2">
+              <input class="form-check-input" type="checkbox" name="use_external_id" value="true" {% if trust_settings.use_external_id %}checked{% endif %}>
+              <label class="form-check-label">Require sts:ExternalId in the trust policy</label>
+            </div>
+          </div>
+        </div>
+        <div class="d-flex gap-2 mt-3">
+          <button class="btn btn-sm btn-primary" type="submit">Update Generated Policies</button>
+          <a class="btn btn-sm btn-outline-secondary" href="/access-requirements">Reset</a>
+        </div>
+      </form>
+      {% if access_model.policy_validation and access_model.policy_validation.status == 'FAIL' %}
+      <div class="alert alert-danger py-2">
+        <strong>Policy validation failed.</strong>
+        <ul class="mb-0 mt-2">
+          {% for message in access_model.policy_validation.errors %}
+          <li>{{ message }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+      <div class="row g-3">
+        <div class="col-xl-6">
+          <details class="account-advanced" open>
+            <summary>Generated IAM Policy</summary>
+            <div class="policy-toolbar mt-3">
+              <button class="btn btn-sm btn-outline-secondary" type="button" data-copy-target="generated-iam-policy">Copy</button>
+              <button class="btn btn-sm btn-outline-secondary" type="button" data-download-text="generated-iam-policy" data-download-filename="csao-access-requirements-policy.json">Download</button>
+              <a class="btn btn-sm btn-outline-secondary" href="/access-requirements/policy.json{{ access_model.policy_query_string or '' }}">Export JSON</a>
+              <a class="btn btn-sm btn-outline-secondary" href="/access-requirements/onboarding-package.zip{{ access_model.policy_query_string or '' }}">Onboarding Package</a>
+            </div>
+            <pre id="generated-iam-policy" class="json-box policy-code">{{ policy_json }}</pre>
+          </details>
+        </div>
+        <div class="col-xl-6">
+          <details class="account-advanced" open>
+            <summary>Generated Trust Policy</summary>
+            <div class="policy-toolbar mt-3">
+              <button class="btn btn-sm btn-outline-secondary" type="button" data-copy-target="generated-trust-policy">Copy</button>
+              <button class="btn btn-sm btn-outline-secondary" type="button" data-download-text="generated-trust-policy" data-download-filename="csao-trust-policy.json">Download</button>
+            </div>
+            <pre id="generated-trust-policy" class="json-box policy-code">{{ trust_policy_json }}</pre>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section id="permissions" class="panel mb-3">
+      <div class="panel-header">
+        <div>
+          <h4 class="mb-1">Permission Summary</h4>
+          <div class="text-secondary">Summarized first for administrators, with full technical reference preserved below.</div>
+        </div>
+      </div>
+      <div class="row g-3 mb-3">
+        <div class="col-xl-4">
+          <div class="summary-card h-100">
+            <div class="metric-label">Required Services</div>
+            <div class="tag-list mt-3">
+              {% for service in required_services %}
+              <span class="tag">{{ service }}</span>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        <div class="col-xl-4">
+          <div class="summary-card h-100">
+            <div class="metric-label">Optional Services</div>
+            <div class="tag-list mt-3">
+              {% for service in optional_services %}
+              <span class="tag">{{ service }}</span>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        <div class="col-xl-4">
+          <div class="summary-card h-100">
+            <div class="metric-label">Assessment Coverage</div>
+            <div class="coverage-tiles">
+              <div>
+                <div class="metric-value">{{ coverage_summary.core_coverage }}</div>
+                <div class="metric-sub">Core Coverage</div>
+              </div>
+              <div>
+                <div class="metric-value">{{ coverage_summary.enhanced_coverage }}</div>
+                <div class="metric-sub">Enhanced Coverage</div>
+              </div>
+              <div class="metric-sub">{{ coverage_summary.advanced_detection }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="summary-card">
+        <div class="metric-label mb-2">Permission Summary Table</div>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>AWS Service</th>
+                <th>Permission Scope</th>
+                <th>Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in access_model.policy_summary_rows or [] %}
+              <tr>
+                <td>{{ row.aws_service }}</td>
+                <td>{{ row.permission_scope }}</td>
+                <td>{{ row.purpose }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="readiness" class="panel mb-3">
+      <div class="panel-header">
+        <div>
+          <h4 class="mb-1">Assessment Readiness</h4>
+          <div class="text-secondary">Track the major onboarding gates without blocking setup for missing optional services.</div>
+        </div>
+      </div>
+      <div class="readiness-grid">
+        {% for item in assessment_readiness %}
+        <div class="summary-card readiness-card">
+          <div class="d-flex justify-content-between gap-3 align-items-start">
+            <div>
+              <div class="metric-label">{{ item.label }}</div>
+              <div class="metric-sub mt-2">{{ item.detail }}</div>
+            </div>
+            {{ ui.status_badge(item.status|upper) }}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section id="impact" class="panel mb-3">
+      <div class="panel-header">
+        <div>
+          <h4 class="mb-1">Service Impact Matrix</h4>
+          <div class="text-secondary">Explain why a service is requested and what assessment capability is reduced if access is unavailable.</div>
+        </div>
+      </div>
+      <div class="impact-grid">
+        {% for row in service_impact_matrix %}
+        <article class="permission-card">
+          <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
+            <div>
+              <h5 class="mb-1">{{ row.service }}</h5>
+              <div class="text-secondary small">{{ row.purpose }}</div>
+            </div>
+            {{ ui.status_badge(row.severity) }}
+          </div>
+          <div class="small mb-2"><strong>Purpose:</strong> {{ row.purpose }}</div>
+          <div class="small mb-2"><strong>Unavailable if missing:</strong> {{ row.impact }}</div>
+          <div class="small"><strong>Collectors:</strong> {{ row.collectors | join(', ') }}</div>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section id="collectors" class="panel mb-3">
+      <div class="panel-header">
+        <div>
+          <h4 class="mb-1">Collector Overview</h4>
+          <div class="text-secondary">Every collector is preserved, but packaged for faster review with expand/collapse details.</div>
+        </div>
+      </div>
+      <div class="collector-accordion">
+        {% for collector in collector_permissions %}
+        <details class="account-advanced">
+          <summary>{{ collector.name }}{% if collector.enabled %} <span class="text-secondary">| Enabled</span>{% endif %}</summary>
+          <div class="collector-detail-grid mt-3">
+            <div><strong>Purpose</strong><div class="text-secondary">{{ collector.purpose }}</div></div>
+            <div><strong>AWS Services</strong><div class="text-secondary">{{ collector.services_inspected | join(', ') if collector.services_inspected else 'External Only' }}</div></div>
+            <div><strong>Evidence Produced</strong><div class="text-secondary">{{ collector.evidence_produced | join(', ') if collector.evidence_produced else 'N/A' }}</div></div>
+            <div><strong>Threat Scenarios</strong><div class="text-secondary">{{ collector.threat_scenarios_supported | join(', ') if collector.threat_scenarios_supported else 'N/A' }}</div></div>
+            <div><strong>MITRE Techniques</strong><div class="text-secondary">{{ collector.mitre_mapping | join(', ') if collector.mitre_mapping else 'N/A' }}</div></div>
+            <div><strong>Estimated Runtime</strong><div class="text-secondary">{{ collector.estimated_runtime or 'Medium' }}</div></div>
+          </div>
+          <div class="metric-label mt-3 mb-2">Permissions Used</div>
+          <div class="permission-actions">
+            {% for permission in collector.permissions %}
+              {% for action in permission.actions %}
+              <code>{{ action }}</code>
+              {% endfor %}
+            {% else %}
+            <span class="text-secondary">No AWS permissions required</span>
+            {% endfor %}
+          </div>
+        </details>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section id="matrix" class="panel mb-3">
+      <div class="panel-header">
+        <div>
+          <h4 class="mb-1">IAM Permission Matrix</h4>
+          <div class="text-secondary">Searchable, filterable technical matrix generated from the current collector configuration.</div>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+          <input class="form-control form-control-sm matrix-search" type="search" placeholder="Search service, action, collector" data-matrix-search>
+          <select class="form-select form-select-sm matrix-filter" data-matrix-filter>
+            <option value="">All Services</option>
+            {% for service in required_services %}
+            <option value="{{ service }}">{{ service }}</option>
+            {% endfor %}
+          </select>
+          <button class="btn btn-sm btn-outline-secondary" type="button" data-export-csv="permission-matrix-table" data-export-filename="csao-iam-permission-matrix.csv">Export CSV</button>
+        </div>
+      </div>
+      <div class="matrix-summary">
+        <span class="meta-pill">{{ technical_reference.permission_count }} permission rows</span>
+        <span class="meta-pill">{{ technical_reference.collector_count }} collectors</span>
+        <span class="meta-pill">{{ technical_reference.service_count }} services</span>
+      </div>
+      <div class="table-responsive">
+          <table id="permission-matrix-table" class="table table-hover align-middle" data-permission-matrix>
+          <thead>
+            <tr>
+              <th>Collector</th>
+              <th>AWS Service</th>
+              <th>AWS APIs Called</th>
+              <th>IAM Actions Required</th>
+              <th>Purpose</th>
+              <th>Evidence Collected</th>
+              <th>Assessment Capability</th>
+              <th>Mandatory / Optional</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in permission_matrix %}
+            <tr data-service="{{ row.aws_service }}">
+              <td>{{ row.collector }}</td>
+              <td>{{ row.aws_service }}</td>
+              <td>{{ row.aws_apis | join(', ') }}</td>
+              <td>{{ row.iam_actions | join(', ') }}</td>
+              <td>{{ row.purpose }}</td>
+              <td>{{ row.evidence_collected | join(', ') }}</td>
+              <td>{{ row.assessment_capability_enabled }}</td>
+              <td>{{ row.classification | upper }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="trust" class="panel mb-3">
+      <div class="panel-header">
+        <div>
+          <h4 class="mb-1">Security Transparency</h4>
+          <div class="text-secondary">Trust Center guidance for enterprise security reviews before onboarding access.</div>
+        </div>
+        <a class="btn btn-outline-secondary" href="/trust-center">Open Full Trust Center</a>
+      </div>
+      <div class="row g-3">
+        <div class="col-xl-6">
+          <div class="summary-card h-100">
+            <div class="metric-label">Read-Only Guarantee</div>
+            <ul class="access-list mb-0 mt-3">
+              {% for item in security_transparency.read_only_guarantee %}
+              <li>{{ item }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div>
+        <div class="col-xl-6">
+          <div class="summary-card h-100">
+            <div class="metric-label">Safety Validation</div>
+            <div class="metric-value fs-5">{{ security_transparency.safety_validation.status }}</div>
+            <div class="metric-sub mt-2">Enabled collectors are continuously evaluated against the read-only operating model.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="faq" class="panel mb-3">
+      <div class="panel-header">
+        <div>
+          <h4 class="mb-1">Frequently Asked Questions</h4>
+          <div class="text-secondary">Common questions from cloud administrators, auditors, and security architects.</div>
+        </div>
+      </div>
+      <div class="collector-accordion">
+        {% for item in faq %}
+        <details class="account-advanced">
+          <summary>{{ item.q }}</summary>
+          <div class="text-secondary mt-3">{{ item.a }}</div>
+        </details>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section id="reference" class="panel">
+      <div class="panel-header">
+        <div>
+          <h4 class="mb-1">Technical Reference</h4>
+          <div class="text-secondary">All technical detail remains intact here for advanced users, auditors, and implementation teams.</div>
+        </div>
+      </div>
+      <div class="reference-panels">
+        <details class="account-advanced" open>
+          <summary>Collector Permission Matrix</summary>
+          <div class="table-responsive mt-3">
+            <table class="table table-hover align-middle">
+              <thead>
+                <tr>
+                  <th>Collector</th>
+                  <th>Purpose</th>
+                  <th>Services</th>
+                  <th>Evidence</th>
+                  <th>MITRE</th>
+                  <th>Threat Scenarios</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for collector in collector_permissions %}
+                <tr>
+                  <td>{{ collector.name }}</td>
+                  <td>{{ collector.purpose }}</td>
+                  <td>{{ collector.services_inspected | join(', ') if collector.services_inspected else 'External Only' }}</td>
+                  <td>{{ collector.evidence_produced | join(', ') if collector.evidence_produced else 'N/A' }}</td>
+                  <td>{{ collector.mitre_mapping | join(', ') if collector.mitre_mapping else 'N/A' }}</td>
+                  <td>{{ collector.threat_scenarios_supported | join(', ') if collector.threat_scenarios_supported else 'N/A' }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+
+        <details class="account-advanced">
+          <summary>Permission Explanations</summary>
+          <div class="impact-grid mt-3">
+            {% for row in permission_explanations %}
+            <article class="summary-card">
+              <div class="metric-label">{{ row.service }}</div>
+              <div class="small mt-2"><strong>Why access is needed:</strong> {{ row.why_access_is_needed }}</div>
+              <div class="small mt-2"><strong>Collector:</strong> {{ row.collector }}</div>
+              <div class="small mt-2"><strong>Evidence:</strong> {{ row.evidence_produced }}</div>
+              <div class="small mt-2"><strong>Assessment domain:</strong> {{ row.assessment_domain }}</div>
+            </article>
+            {% endfor %}
+          </div>
+        </details>
+
+        <details class="account-advanced">
+          <summary>Future Multi-Cloud Roadmap</summary>
+          <div class="row g-3 mt-3">
+            <div class="col-lg-6">
+              <div class="summary-card h-100">
+                <div class="metric-label">Google Cloud Platform</div>
+                <div class="text-secondary mt-2">Planned for future release.</div>
+              </div>
+            </div>
+            <div class="col-lg-6">
+              <div class="summary-card h-100">
+                <div class="metric-label">Microsoft Azure</div>
+                <div class="text-secondary mt-2">Planned for future release.</div>
+              </div>
+            </div>
+          </div>
+        </details>
+      </div>
+    </section>
+  </div>
+</div>

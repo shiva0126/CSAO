@@ -1,0 +1,83 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+venv.corrupt-*/
+
+# Build and packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+
+# IDE and editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Operating system
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Runtime, cache, and session state
+cache/*
+!cache/.gitkeep
+runtime/
+sessions/
+state/
+
+# Assessment output and generated artifacts
+output/*
+!output/.gitkeep
+reports/generated/*
+!reports/generated/.gitkeep
+exports/*
+!exports/.gitkeep
+diagnostics/*
+!diagnostics/.gitkeep
+*.zip
+
+# Local databases and generated artifacts
+*.db
+*.sqlite
+*.sqlite3
+
+# Secrets and certificates
+.env
+.env.*
+*.pem
+*.key
+*.crt
+credentials.json
+aws_credentials*
+config.local.*
+
+# Project-specific backups and local scratch files
+*.backup
+

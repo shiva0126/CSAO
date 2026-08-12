@@ -1,0 +1,9 @@
+select
+ db_instance_identifier,
+ engine,
+ publicly_accessible,
+ region
+from
+ aws_rds_db_instance
+where
+ publicly_accessible=true;

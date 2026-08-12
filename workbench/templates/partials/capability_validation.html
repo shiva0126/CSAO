@@ -1,0 +1,50 @@
+<div class="panel mb-3">
+  <div class="panel-header">
+    <div>
+      <h4 class="mb-1">Pre-Assessment Validation</h4>
+      <div class="text-secondary">Validate AWS identity, regional scope, collector readiness, and service availability before assessment launch.</div>
+    </div>
+    <div class="text-secondary">Warnings do not block the assessment by default.</div>
+  </div>
+  <form class="row g-3 align-items-end"
+        hx-get="/api/capability-validation"
+        hx-target="#workbench-content"
+        hx-swap="innerHTML">
+    <div class="col-lg-8">
+      <label class="form-label">Cloud Account</label>
+      <select class="form-select" name="cloud_account_id">
+        <option value="">Select account</option>
+        {% for account in accounts %}
+        <option value="{{ account.id }}" {% if selected_account_id == account.id %}selected{% endif %}>
+          {{ account.name }} | {{ account.account_id or account.auth_type }} | {{ account.last_validation_status }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-lg-4">
+      <button class="btn btn-primary w-100" type="submit">Run Pre-Assessment Validation</button>
+    </div>
+  </form>
+</div>
+
+{% include "partials/assessment_validation.html" %}
+
+<div class="panel">
+  <div class="panel-header">
+    <div>
+      <h4 class="mb-1">Collector Scope</h4>
+      <div class="text-secondary">The capability check covers the collectors currently enabled in CSAO settings.</div>
+    </div>
+  </div>
+  <div class="settings-grid">
+    {% for collector in collectors %}
+    <div class="summary-card">
+      <div class="metric-label">{{ collector.label }}</div>
+      <div class="metric-value fs-6">{{ "Enabled" if collector.enabled else "Disabled" }}</div>
+      <div class="metric-sub">Collector key: {{ collector.key }}</div>
+    </div>
+    {% else %}
+    <div class="text-secondary">No collectors are configured.</div>
+    {% endfor %}
+  </div>
+</div>

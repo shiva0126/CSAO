@@ -1,0 +1,183 @@
+###############################################################################
+# Cloud Security Assessment Orchestrator (CSAO)
+# Assessment Checklist - MINIMAL HAND-WRITTEN EXAMPLE
+#
+# The real, active checklist is checklists/checklist.yaml - a 177-item
+# import from the manager's STRIDE assessment workbooks, produced by
+# checklists/import_stride_workbooks.py. config/config.yaml -> checklist.file
+# points at that file. This example file stays as a minimal, easy-to-read
+# reference for the schema and is used by the offline pytest fixtures.
+#
+# Schema (see checklists/README.md for full field documentation, including
+# the richer field set the real checklist.yaml carries - domain, STRIDE
+# category, priority tier, MITRE mapping, etc.):
+#
+#   id                        unique checklist item id, e.g. "CHK-IAM-001"
+#   title                     human-readable control name
+#   tool / query_ref          shorthand for a single source (see `sources`
+#                             below) - kept for readability in this example
+#   expected_evidence         what a PASS looks like, for the analyst
+#   manual_validation_required   true if a human must confirm PASS/FAIL
+#                                 even when the query returns no findings
+#   mitre_mapping             fallback MITRE tactic/technique list, used
+#                             only when data/mitre_mappings.yaml has no
+#                             entry for "<tool>:<query_ref>"
+#   threat_scenario           narrative used to populate Finding.related_threat_scenario
+#   related_attack_paths      free-text hints for the Attack Path Engine /
+#                             analyst about which attack path patterns this
+#                             control relates to
+#
+# A checklist item validated by MORE than one (tool, query_ref) pair (e.g.
+# both an SSH-open and RDP-open query) uses `sources: [{tool, query_ref}, ...]`
+# instead of the singular `tool`/`query_ref` shown here - both forms are
+# accepted by core/engines/checklist_engine.py. Multiple findings may
+# satisfy (or fail) a single checklist item either way - the Checklist
+# Validation Engine aggregates across all of an item's sources, not 1:1.
+###############################################################################
+
+checklist:
+
+  - id: CHK-IAM-001
+    title: "No IAM identities with wildcard (*) permissions"
+    tool: steampipe
+    query_ref: aws/iam/wildcard_permissions
+    expected_evidence: "Query returns zero rows"
+    manual_validation_required: false
+    mitre_mapping:
+      - tactic: "Privilege Escalation"
+        technique_id: "T1098"
+        technique: "Account Manipulation"
+    threat_scenario: "Overly-permissive IAM policy allows privilege escalation to full account compromise"
+    related_attack_paths: "IAM wildcard policy -> AssumeRole / PassRole -> Crown Jewel access"
+
+  - id: CHK-IAM-002
+    title: "MFA enforced for all IAM users and roles"
+    tool: steampipe
+    query_ref: aws/iam/mfa_disabled_users
+    expected_evidence: "Query returns zero rows"
+    manual_validation_required: false
+    mitre_mapping:
+      - tactic: "Credential Access"
+        technique_id: "T1110"
+        technique: "Brute Force"
+    threat_scenario: "Credential stuffing / brute force against a console user without MFA"
+    related_attack_paths: "Compromised IAM credential -> Console/API access -> Lateral movement"
+
+  - id: CHK-IAM-003
+    title: "IAM access keys rotated within policy window"
+    tool: steampipe
+    query_ref: aws/iam/access_keys_old
+    expected_evidence: "Query returns zero rows"
+    manual_validation_required: true
+    mitre_mapping: []
+    threat_scenario: "Long-lived access keys increase the exposure window if leaked"
+    related_attack_paths: "Leaked long-lived key -> Programmatic access -> Data exfiltration"
+
+  - id: CHK-EC2-001
+    title: "No EC2 instances directly exposed to the internet"
+    tool: steampipe
+    query_ref: aws/ec2/public_instances
+    expected_evidence: "Query returns zero rows"
+    manual_validation_required: false
+    mitre_mapping: []
+    threat_scenario: "Publicly reachable compute is a common initial-access vector"
+    related_attack_paths: "Public API/EC2 -> Vulnerable service -> IMDS credential theft -> IAM role -> S3/RDS"
+
+  - id: CHK-EC2-002
+    title: "IMDSv2 enforced on all EC2 instances"
+    tool: steampipe
+    query_ref: aws/ec2/missing_imdsv2
+    expected_evidence: "Query returns zero rows"
+    manual_validation_required: false
+    mitre_mapping: []
+    threat_scenario: "IMDSv1 allows SSRF-based theft of the instance's IAM role credentials"
+    related_attack_paths: "SSRF on EC2 -> IMDSv1 -> IAM role credentials -> downstream AWS API access"
+
+  - id: CHK-NET-001
+    title: "No security group permits unrestricted SSH (22/tcp) from 0.0.0.0/0"
+    tool: steampipe
+    query_ref: aws/vpc/ssh_open_world
+    expected_evidence: "Query returns zero rows"
+    manual_validation_required: false
+    mitre_mapping: []
+    threat_scenario: "Internet-exposed SSH is a common brute-force / exploitation target"
+    related_attack_paths: "Open SSH -> Credential brute force -> Host compromise -> Lateral movement"
+
+  - id: CHK-S3-001
+    title: "No S3 buckets are publicly accessible"
+    tool: steampipe
+    query_ref: aws/s3/bucket_public
+    expected_evidence: "Query returns zero rows"
+    manual_validation_required: false
+    mitre_mapping: []
+    threat_scenario: "Public S3 buckets are one of the most common cloud data breach vectors"
+    related_attack_paths: "Public S3 bucket -> Direct data access / exfiltration"
+
+  - id: CHK-S3-002
+    title: "S3 buckets encrypted at rest"
+    tool: steampipe
+    query_ref: aws/s3/bucket_without_encryption
+    expected_evidence: "Query returns zero rows"
+    manual_validation_required: false
+    mitre_mapping: []
+    threat_scenario: "Unencrypted storage increases impact of any unauthorized access"
+    related_attack_paths: ""
+
+  - id: CHK-LOG-001
+    title: "CloudTrail enabled in all regions"
+    tool: steampipe
+    query_ref: aws/cloudtrail/multi_region_trail
+    expected_evidence: "At least one multi-region trail present"
+    manual_validation_required: false
+    mitre_mapping: []
+    threat_scenario: "Missing audit logging allows attacker activity to go undetected"
+    related_attack_paths: ""
+
+  - id: CHK-LOG-002
+    title: "GuardDuty enabled"
+    tool: steampipe
+    query_ref: aws/guardduty/detector_status
+    expected_evidence: "Detector status = ENABLED in every in-scope region"
+    manual_validation_required: false
+    mitre_mapping: []
+    threat_scenario: "Missing threat detection reduces Detection Coverage and increases dwell time"
+    related_attack_paths: ""
+
+  - id: CHK-IAM-004
+    title: "No IAM policy permits known privilege-escalation actions"
+    tool: cloudsplaining
+    query_ref: PrivilegeEscalation
+    expected_evidence: "Cloudsplaining report contains no PrivilegeEscalation findings"
+    manual_validation_required: true
+    mitre_mapping: []
+    threat_scenario: "Privilege escalation paths let a low-privilege identity reach admin"
+    related_attack_paths: "Compromised low-priv identity -> PassRole/CreatePolicyVersion -> Admin access"
+
+  - id: CHK-EXT-001
+    title: "No resource is externally accessible per IAM Access Analyzer"
+    tool: access_analyzer
+    query_ref: external_access
+    expected_evidence: "Access Analyzer returns zero active findings"
+    manual_validation_required: true
+    mitre_mapping: []
+    threat_scenario: "Cross-account or public resource policies expose resources outside the trust boundary"
+    related_attack_paths: "External principal -> Resource policy grant -> Direct resource access"
+
+  - id: CHK-NET-002
+    title: "No compute resource is both publicly reachable and missing hardening controls"
+    # Multi-source example: this item is validated by EITHER query hitting -
+    # demonstrates the `sources` list form (see checklists/README.md) that
+    # the real imported checklist.yaml uses extensively.
+    sources:
+      - tool: steampipe
+        query_ref: aws/vpc/ssh_open_world
+      - tool: steampipe
+        query_ref: aws/ec2/public_instances
+    expected_evidence: "Neither query returns rows"
+    manual_validation_required: false
+    # dict-of-lists form (not paired 1:1) - see checklists/README.md
+    mitre_mapping:
+      tactics: ["Initial Access", "Discovery"]
+      techniques: ["T1190", "T1526"]
+    threat_scenario: "Publicly reachable compute with no compensating controls is a common initial-access vector"
+    related_attack_paths: "Public compute -> exploitation -> lateral movement"

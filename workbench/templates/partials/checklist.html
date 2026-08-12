@@ -1,0 +1,72 @@
+{% import "_macros.html" as ui %}
+{% set grouped = {} %}
+{% for row in rows %}
+  {% set _ = grouped.setdefault(row.domain, []) %}
+  {% set _ = grouped[row.domain].append(row) %}
+{% endfor %}
+{% include "partials/assessment_workspace_tabs.html" %}
+<div class="panel mb-3">
+  <div class="panel-header">
+    <div>
+      <h4 class="mb-1">Checklist Validation</h4>
+      <div class="text-secondary">Review workbook controls, evidence expectations, linked threats, and attack-path context.</div>
+    </div>
+  </div>
+</div>
+<div class="accordion" id="checklistAccordion">
+  {% for domain, items in grouped.items() %}
+  <div class="accordion-item">
+    <h2 class="accordion-header" id="heading-{{ loop.index }}">
+      <button class="accordion-button {% if not loop.first %}collapsed{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ loop.index }}">
+        {{ domain }} ({{ items | length }})
+      </button>
+    </h2>
+    <div id="collapse-{{ loop.index }}" class="accordion-collapse collapse {% if loop.first %}show{% endif %}" data-bs-parent="#checklistAccordion">
+      <div class="accordion-body">
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>Control</th>
+                <th>Status</th>
+                <th>Evidence</th>
+                <th>Threats</th>
+                <th>Attack Paths</th>
+                <th>Risk Context</th>
+                <th>Findings</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in items %}
+              <tr class="clickable-row"
+                  hx-get="/api/checklist/{{ item.id }}"
+                  hx-target="#detail-body"
+                  hx-swap="innerHTML"
+                  data-bs-toggle="offcanvas"
+                  data-bs-target="#detailCanvas">
+                <td>{{ item.id }}<div class="small text-secondary">{{ item.title }}</div></td>
+                <td>{{ ui.status_badge(item.status) }}</td>
+                <td>
+                  <div>{{ item.evidence_type or 'Not specified' }}</div>
+                  <div class="small text-secondary">{{ item.collection_method or 'Manual or collector evidence' }}</div>
+                </td>
+                <td>{{ ui.list_tags(item.threat_scenario_ids) }}</td>
+                <td>{{ ui.list_tags(item.related_attack_paths) }}</td>
+                <td>
+                  <div>{{ ui.status_badge(item.priority_tier or 'N/A') }}</div>
+                  <div class="small text-secondary mt-1">Severity: {{ item.severity or 'Not ranked' }}</div>
+                </td>
+                <td>
+                  <div>{{ item.matched_findings }}</div>
+                  <div class="small text-secondary">{{ item.output_document or 'Mapped into standard deliverables' }}</div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>

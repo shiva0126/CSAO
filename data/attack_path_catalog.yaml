@@ -1,0 +1,302 @@
+attack_paths:
+- ap_code: AP-01
+  name: Cloud Governance Baseline Failure
+  kill_chain_summary: No OU structure → No tagging → No guardrails → Flat blast radius
+    across all accounts
+  domains_spanned: Cloud (AWS & GCP)
+  stride_categories: Information Disclosure, Tampering
+  linked_threat_numbers: —
+  linked_threat_number_list: []
+  entry_check_ids:
+  - 1.1.1
+  - 1.1.2
+  escalation_check_ids:
+  - 1.1.3
+  - 1.1.7
+  detection_check_ids:
+  - 1.1.8
+  - 8.1.1
+  severity: High
+- ap_code: AP-02
+  name: Cloud Guardrail Bypass → Org-Wide Pivot
+  kill_chain_summary: SCP exception → Org policy override → Attacker removes all preventive
+    controls → Lateral across all accounts
+  domains_spanned: Cloud (AWS & GCP)
+  stride_categories: Tampering, Elevation of Privilege
+  linked_threat_numbers: '#3, #5'
+  linked_threat_number_list:
+  - 3
+  - 5
+  entry_check_ids:
+  - 1.1.4
+  - 1.2.4
+  - 1.2.6
+  escalation_check_ids:
+  - 1.2.5
+  - 1.5.4
+  detection_check_ids:
+  - 1.2.1
+  - 1.2.2
+  severity: Critical
+- ap_code: AP-03
+  name: Logging Disabled / Detection Blind Spot
+  kill_chain_summary: cloudtrail:StopLogging → No SIEM ingestion → No alerting → Attacker
+    operates invisibly for weeks
+  domains_spanned: Cloud + Detection (D1, D8)
+  stride_categories: Repudiation
+  linked_threat_numbers: '#4, #15'
+  linked_threat_number_list:
+  - 4
+  - 15
+  entry_check_ids:
+  - 1.7.7
+  - 8.1.1
+  escalation_check_ids:
+  - 1.7.1
+  - 1.7.4
+  detection_check_ids:
+  - 8.2.1
+  - 8.3.1
+  - 8.4.2
+  severity: Critical
+- ap_code: AP-04
+  name: Public Exposure → Cloud Foothold
+  kill_chain_summary: Public EC2/API → Exploit vulnerability → IMDSv1 credential theft
+    → Overprivileged role → Admin access
+  domains_spanned: Cloud + Vuln (D1, D5)
+  stride_categories: Spoofing, Elevation of Privilege
+  linked_threat_numbers: '#1, #3'
+  linked_threat_number_list:
+  - 1
+  - 3
+  entry_check_ids:
+  - 1.3.1
+  - 1.3.2
+  - 1.5.1
+  escalation_check_ids:
+  - 1.3.3
+  - 1.3.4
+  - 1.6.7
+  detection_check_ids:
+  - 1.5.7
+  - 8.1.1
+  severity: Critical
+- ap_code: AP-05
+  name: Public Storage → Direct Data Exfiltration
+  kill_chain_summary: Public S3/GCS bucket → Sensitive data exposed → Credentials
+    or PII directly accessible with no exploitation
+  domains_spanned: Cloud Storage (D1)
+  stride_categories: Information Disclosure
+  linked_threat_numbers: '#2'
+  linked_threat_number_list:
+  - 2
+  entry_check_ids:
+  - 1.4.1
+  - 1.4.2
+  escalation_check_ids:
+  - 1.4.6
+  detection_check_ids:
+  - 1.4.7
+  - 8.1.3
+  severity: Critical
+- ap_code: AP-06
+  name: IAM Privilege Escalation → Admin Takeover
+  kill_chain_summary: iam:PassRole or wildcard policy → Assign admin role to controlled
+    resource → Full account takeover
+  domains_spanned: Cloud IAM + Identity (D1, D2)
+  stride_categories: Elevation of Privilege
+  linked_threat_numbers: '#3, #8, #10'
+  linked_threat_number_list:
+  - 3
+  - 8
+  - 10
+  entry_check_ids:
+  - 1.6.1
+  - 1.6.5
+  escalation_check_ids:
+  - 1.6.3
+  - 1.6.7
+  - 2.2.2
+  detection_check_ids:
+  - 1.7.5
+  - 8.3.1
+  severity: Critical
+- ap_code: AP-07
+  name: Secrets Exposure → Credential Abuse
+  kill_chain_summary: Hardcoded secret in repo/env → Attacker authenticates as service
+    → Pivots to all reachable services
+  domains_spanned: Secrets (D1)
+  stride_categories: Information Disclosure
+  linked_threat_numbers: '#10'
+  linked_threat_number_list:
+  - 10
+  entry_check_ids:
+  - 1.8.1
+  - 1.8.2
+  escalation_check_ids:
+  - 1.8.3
+  - 1.8.5
+  detection_check_ids:
+  - 1.8.6
+  - 8.1.3
+  severity: Critical
+- ap_code: AP-08
+  name: Container Escape → Host / Cloud Compromise
+  kill_chain_summary: Vulnerable image → RCE → Privileged container → Node escape
+    → Overprivileged role → Cloud admin
+  domains_spanned: Containers (D1)
+  stride_categories: Elevation of Privilege, Tampering
+  linked_threat_numbers: —
+  linked_threat_number_list: []
+  entry_check_ids:
+  - 1.9.4
+  - 1.9.6
+  escalation_check_ids:
+  - 1.9.2
+  - 1.9.3
+  detection_check_ids:
+  - 1.9.1
+  - 8.1.3
+  severity: Critical
+- ap_code: AP-09
+  name: Active Directory Abuse → Domain Compromise
+  kill_chain_summary: Kerberoasting → Service account hash → Crack offline → Domain
+    Admin → Full AD control
+  domains_spanned: Identity + On-Prem (D2, D3)
+  stride_categories: Elevation of Privilege, Spoofing
+  linked_threat_numbers: '#6'
+  linked_threat_number_list:
+  - 6
+  entry_check_ids:
+  - 2.3.3
+  - 3.3.1
+  escalation_check_ids:
+  - 2.3.2
+  - 2.3.4
+  detection_check_ids:
+  - 8.1.2
+  - 8.3.3
+  severity: Critical
+- ap_code: AP-10
+  name: Identity Federation Abuse → Cloud Takeover
+  kill_chain_summary: No MFA + no CA policy → Phish credential → Authenticate as Global
+    Admin → M365 + Azure takeover
+  domains_spanned: IAM + Entra ID (D2)
+  stride_categories: Spoofing, Elevation of Privilege
+  linked_threat_numbers: '#7'
+  linked_threat_number_list:
+  - 7
+  entry_check_ids:
+  - 2.6.1
+  - 2.7.1
+  escalation_check_ids:
+  - 2.4.3
+  - 2.5.1
+  detection_check_ids:
+  - 8.3.1
+  - 8.6.1
+  severity: Critical
+- ap_code: AP-11
+  name: On-Prem Lateral Movement → Domain Admin
+  kill_chain_summary: Root SSH / Pass-the-Hash → LLMNR poisoning → SMB relay → Credential
+    harvest → Domain Admin
+  domains_spanned: On-Prem + Network (D3, D4)
+  stride_categories: Spoofing, Elevation of Privilege
+  linked_threat_numbers: '#16, #17, #19'
+  linked_threat_number_list:
+  - 16
+  - 17
+  - 19
+  entry_check_ids:
+  - 3.2.2
+  - 3.6.2
+  - 4.8.1
+  escalation_check_ids:
+  - 3.1.2
+  - 3.6.3
+  - 3.3.2
+  detection_check_ids:
+  - 8.3.3
+  - 8.1.2
+  severity: Critical
+- ap_code: AP-12
+  name: Hypervisor / Backup Compromise
+  kill_chain_summary: Weak hypervisor auth → Admin access → Snapshot all VMs → Access
+    backup storage → Full data exfiltration
+  domains_spanned: On-Prem Infra (D3)
+  stride_categories: Elevation of Privilege, Tampering
+  linked_threat_numbers: '#18, #20'
+  linked_threat_number_list:
+  - 18
+  - 20
+  entry_check_ids:
+  - 3.4.1
+  - 3.7.1
+  escalation_check_ids:
+  - 3.4.2
+  - 3.4.3
+  - 3.7.2
+  detection_check_ids:
+  - 8.1.2
+  - 8.3.3
+  severity: Critical
+- ap_code: AP-13
+  name: Network Segmentation Failure → Pivot
+  kill_chain_summary: Any-any firewall rule → No zone separation → Attacker reaches
+    DB/management tier from internet-facing compromise
+  domains_spanned: Network (D4)
+  stride_categories: Tampering, Information Disclosure
+  linked_threat_numbers: '#11, #13'
+  linked_threat_number_list:
+  - 11
+  - 13
+  entry_check_ids:
+  - 4.2.1
+  - 4.1.2
+  - 4.3.2
+  escalation_check_ids:
+  - 4.1.3
+  - 4.2.4
+  detection_check_ids:
+  - 4.7.1
+  - 8.1.2
+  severity: Critical
+- ap_code: AP-14
+  name: Edge / VPN Initial Access
+  kill_chain_summary: VPN without MFA → Credential phish → Full internal network access
+    → Lateral movement to all internal systems
+  domains_spanned: Network + Edge (D4)
+  stride_categories: Spoofing
+  linked_threat_numbers: '#12, #14'
+  linked_threat_number_list:
+  - 12
+  - 14
+  entry_check_ids:
+  - 4.8.1
+  - 4.5.1
+  escalation_check_ids:
+  - 4.5.2
+  - 4.8.2
+  detection_check_ids:
+  - 8.3.1
+  - 8.6.1
+  severity: Critical
+- ap_code: AP-15
+  name: Orphaned / Vendor Account Exploitation
+  kill_chain_summary: Orphaned privileged account → No owner / no monitoring → Attacker
+    activates → Persistent privileged access undetected
+  domains_spanned: Access Control (D7)
+  stride_categories: Spoofing, Repudiation
+  linked_threat_numbers: '#9'
+  linked_threat_number_list:
+  - 9
+  entry_check_ids:
+  - 7.2.1
+  - 7.4.1
+  escalation_check_ids:
+  - 7.3.1
+  - 7.2.2
+  detection_check_ids:
+  - 7.3.2
+  - 8.3.1
+  severity: High

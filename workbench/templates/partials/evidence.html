@@ -1,0 +1,81 @@
+{% import "_macros.html" as ui %}
+{% include "partials/assessment_workspace_tabs.html" %}
+<div class="panel mb-3">
+  <div class="panel-header">
+    <div>
+      <h4 class="mb-1">Evidence Collection</h4>
+      <div class="text-secondary">Review collected evidence by collector, AWS service, region, resource, evidence type, and timestamp before validating controls.</div>
+    </div>
+  </div>
+  <form class="filter-bar" method="get" hx-get="/evidence" hx-target="#workbench-content" hx-push-url="true">
+    <select class="form-select form-select-sm" name="source">
+      <option value="">All Sources</option>
+      {% for option in source_options %}
+      <option value="{{ option }}" {% if source == option %}selected{% endif %}>{{ option }}</option>
+      {% endfor %}
+    </select>
+    <input class="form-control form-control-sm" type="text" name="path" value="{{ preview.path }}" placeholder="Select a file path below or paste one here">
+    <input class="form-control form-control-sm" type="search" name="search" value="{{ search }}" placeholder="Search within file">
+    <button class="btn btn-sm btn-primary" type="submit">Open</button>
+    {% if preview.downloadable %}
+    <a class="btn btn-sm btn-outline-secondary" href="/evidence/download?path={{ preview.path }}">Download</a>
+    {% endif %}
+  </form>
+</div>
+
+<div class="panel mb-3 table-responsive">
+  <div class="panel-header">
+    <h4 class="mb-0">Collected Evidence</h4>
+  </div>
+  <table class="table table-hover align-middle">
+    <thead>
+      <tr>
+        <th>Collector</th>
+        <th>AWS Service</th>
+        <th>Region</th>
+        <th>Resource</th>
+        <th>Evidence Type</th>
+        <th>Timestamp</th>
+        <th>Checklist Controls</th>
+        <th>File</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in sources %}
+      <tr class="clickable-row"
+          hx-get="/evidence?path={{ item.path | urlencode }}"
+          hx-target="#workbench-content"
+          hx-push-url="true">
+        <td>{{ item.collector or item.source }}</td>
+        <td>{{ item.aws_service or item.source }}</td>
+        <td>{{ item.region or 'N/A' }}</td>
+        <td>{{ item.resource or item.name }}</td>
+        <td>{{ item.evidence_type or item.kind }}</td>
+        <td>{{ item.timestamp or item.modified }}</td>
+        <td>{{ ui.list_tags(item.checklist_controls) }}</td>
+        <td>
+          <div>{{ item.name }}</div>
+          <div class="small text-secondary">{{ item.path }}</div>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="text-secondary">No evidence files indexed yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="panel">
+  <div class="panel-header">
+    <h4 class="mb-0">Preview</h4>
+    <div class="text-secondary">{{ preview.path }}</div>
+  </div>
+  {% if preview.downloadable %}
+  <div class="settings-grid mb-3">
+    <div><strong>Collector</strong><div>{{ preview.source }}</div></div>
+    <div><strong>Modified</strong><div>{{ preview.modified }}</div></div>
+    <div><strong>Size</strong><div>{{ preview.size }}</div></div>
+  </div>
+  {% endif %}
+  <pre class="json-box">{{ preview.content }}</pre>
+</div>

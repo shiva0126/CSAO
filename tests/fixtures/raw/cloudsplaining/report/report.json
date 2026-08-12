@@ -1,0 +1,7 @@
+{
+    "demo-role": {
+        "PrivilegeEscalation": [
+            "overly permissive inline policy grants iam:* "
+        ]
+    }
+}

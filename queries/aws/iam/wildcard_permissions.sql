@@ -1,0 +1,10 @@
+select
+ policy_name,
+ action,
+ resource
+from
+ aws_iam_policy
+where
+ action='*'
+or
+ resource='*';
