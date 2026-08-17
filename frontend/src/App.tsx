@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { useMe } from '@/lib/queries'
 import { Layout } from '@/components/Layout'
 import { LoginPage } from '@/pages/Login'
+import { RegisterPage } from '@/pages/Register'
 import { SetupPage } from '@/pages/Setup'
 import { DashboardPage } from '@/pages/Dashboard'
 import { FindingsPage } from '@/pages/Findings'
@@ -37,6 +38,10 @@ export default function App() {
       <Route
         path="/setup"
         element={me?.needs_setup ? <SetupPage /> : <Navigate to={me?.authenticated ? '/dashboard' : '/login'} replace />}
+      />
+      <Route
+        path="/register"
+        element={me?.authenticated ? <Navigate to="/dashboard" replace /> : <RegisterPage />}
       />
       <Route
         element={

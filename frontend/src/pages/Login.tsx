@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useLogin } from '@/lib/queries'
 import { ApiError } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -57,6 +57,9 @@ export function LoginPage() {
             <Button type="submit" className="w-full" disabled={login.isPending}>
               {login.isPending ? 'Signing in…' : 'Sign in'}
             </Button>
+            <p className="text-sm text-muted-foreground text-center">
+              Need an account? <Link to="/register" className="underline">Register</Link>
+            </p>
           </form>
         </CardContent>
       </Card>

@@ -3,7 +3,9 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
-from workbench.auth import SESSION_COOKIE, SESSION_TIMEOUT_SECONDS
+from sqlalchemy.exc import IntegrityError
+
+from workbench.auth import ROLE_ANALYST, SESSION_COOKIE, SESSION_TIMEOUT_SECONDS, secure_cookie_required
 from workbench.api.deps import get_current_user
 from workbench.singletons import auth_manager
 
@@ -20,14 +22,6 @@ class SetupBody(BaseModel):
     display_name: str = ""
     password: str
     confirm_password: str
-
-
-def _secure_cookie(request: Request) -> bool:
-    host = str(request.headers.get("host", "")).split(":", 1)[0].lower()
-    if host in {"127.0.0.1", "localhost", "::1"}:
-        return False
-    forwarded_proto = request.headers.get("x-forwarded-proto", "")
-    return forwarded_proto.lower() == "https" if forwarded_proto else True
 
 
 @router.get("/me")
@@ -64,6 +58,30 @@ def setup(body: SetupBody):
     return {"status": "ok"}
 
 
+class RegisterBody(BaseModel):
+    username: str
+    display_name: str = ""
+    password: str
+    confirm_password: str
+
+
+@router.post("/register")
+def register(body: RegisterBody):
+    # Open self-service signup for anyone beyond the first (setup) account.
+    # Deliberately hardcodes ROLE_ANALYST server-side regardless of any role
+    # a caller might try to pass -- Administrator stays admin-assigned only,
+    # via Admin -> Users, so nobody can self-grant full account access.
+    if body.password != body.confirm_password:
+        raise HTTPException(status_code=400, detail="Passwords do not match")
+    try:
+        auth_manager.create_user(None, body.username, body.display_name, ROLE_ANALYST, body.password)
+    except IntegrityError as exc:
+        raise HTTPException(status_code=400, detail="A user with that username already exists.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "ok"}
+
+
 @router.post("/login")
 def login(body: LoginBody, request: Request, response: Response):
     remote_addr = request.headers.get("x-forwarded-for") or request.headers.get("host", "")
@@ -75,7 +93,7 @@ def login(body: LoginBody, request: Request, response: Response):
         SESSION_COOKIE,
         token,
         max_age=SESSION_TIMEOUT_SECONDS,
-        secure=_secure_cookie(request),
+        secure=secure_cookie_required(request),
         httponly=True,
         samesite="strict",
     )

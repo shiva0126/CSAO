@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
+from fastapi import Request
 from sqlalchemy import func, select
 
 from workbench.db.base import Base, SyncSessionLocal, sync_engine
@@ -29,6 +30,34 @@ ROLE_RANK = {
 DEV_BOOTSTRAP_USERNAME = os.environ.get("CSAO_DEV_BOOTSTRAP_USERNAME", "Devd")
 FAILED_LOGIN_THRESHOLD = int(os.environ.get("CSAO_FAILED_LOGIN_THRESHOLD", "5"))
 LOCKOUT_MINUTES = int(os.environ.get("CSAO_LOCKOUT_MINUTES", "15"))
+
+
+def development_mode_enabled() -> bool:
+    return os.environ.get("CSAO_DEV_MODE", "").lower() in {"1", "true", "yes"}
+
+
+def secure_cookie_required(request: Request) -> bool:
+    """Single source of truth for whether the session cookie gets `Secure`.
+
+    Every login/setup endpoint must call this -- a second, drifted copy of
+    this logic previously lived in workbench/api/auth.py and never learned
+    about CSAO_COOKIE_SECURE, so the JSON API kept marking cookies Secure
+    over plain HTTP even after the env var was set to disable that.
+    """
+    configured = os.environ.get("CSAO_COOKIE_SECURE", "").lower()
+    if configured in {"0", "false", "no"}:
+        return False
+    if configured in {"1", "true", "yes"}:
+        return True
+    if development_mode_enabled():
+        return False
+    forwarded_proto = request.headers.get("x-forwarded-proto", "")
+    if forwarded_proto:
+        return forwarded_proto.lower() == "https"
+    host = str(request.headers.get("host", "")).split(":", 1)[0].lower()
+    if host in {"127.0.0.1", "localhost", "::1"}:
+        return False
+    return True
 
 
 def utc_now() -> datetime:
@@ -185,29 +214,6 @@ class LocalAuthManager:
             user_id = user.id
         self.log_login_event(normalized_username, None, "USER_CREATED", True, detail=ROLE_ADMIN)
         return self.get_user(user_id) or {}
-
-    def reset_development_password(self) -> Dict[str, Any]:
-        username = development_bootstrap_username()
-        password = development_bootstrap_password()
-        if not username or not password:
-            raise ValueError("Development bootstrap credentials are not configured.")
-        user = self.get_user_by_username(username)
-        if not user:
-            user = self.ensure_development_user()
-        with SyncSessionLocal() as db:
-            row = db.get(User, user["id"])
-            row.password_hash = self._hash_password(password)
-            row.must_change_password = False
-            row.is_active = True
-            row.updated_at = utc_now()
-            db.execute(
-                SessionToken.__table__.delete().where(SessionToken.user_id == user["id"])
-            )
-            db.commit()
-        self.log_login_event(
-            username.lower(), None, "DEV_PASSWORD_RESET", True, detail=str(user["id"])
-        )
-        return self.get_user(user["id"]) or user
 
     def update_user(
         self,

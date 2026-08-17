@@ -111,6 +111,11 @@ services:
       DATABASE_URL_SYNC: postgresql+psycopg://csao:${CSAO_DB_PASSWORD}@postgres:5432/csao
       REDIS_URL: redis://redis:6379/0
       CSAO_HOST: 0.0.0.0
+      # No TLS termination in front of this deployment -- accessing over
+      # plain HTTP by IP means a `Secure` session cookie would be silently
+      # dropped by the browser, breaking login. Set to "true" once a
+      # reverse proxy terminates HTTPS in front of this service.
+      CSAO_COOKIE_SECURE: "false"
     depends_on:
       postgres:
         condition: service_healthy
